@@ -1,4 +1,4 @@
-// MSCopy.cpp : Defines the entry point for the application.
+// MSCopyThumb.cpp : Defines the entry point for the application.
 //
 
 /*********************************************************************/
@@ -11,7 +11,7 @@
 /* Author: Laurent MARTIN - ASSYSTEM								 */
 /* Version: 1.00													 */
 /* Date: 26/11/2014													 */
-/* Panel type: TP277												 */
+/* Panel type: MP270B												 */
 /*********************************************************************/
 
 #include "stdafx.h"
@@ -26,6 +26,8 @@
 // Global variables
 tstMSCopyStatus gmcsMSCopyStatus;
 tstMSCopyCfg gmccMSCopyCfg; 
+
+SOCKET listening_socket, client_socket;
 
 // Function prototypes
 unsigned char ReadPanelIniFile(char *strFilePath);
@@ -265,6 +267,60 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		return(0);
 	}
 	
+	WSADATA wsaData; //Filled by call to WSAStartup
+
+
+	int wsaret = WSAStartup(0x101, &wsaData);
+
+	if(wsaret!=0) {
+		printf("Error in call to WSAStartup, error code: %d.\nExiting in 3 seconds\n", wsaret);
+		Sleep(3000);
+		return -1;
+	}
+
+	sockaddr_in local_address; //Specifies address of socket
+
+	local_address.sin_family = AF_INET; //Address family
+	local_address.sin_addr.s_addr = INADDR_ANY; // Accept connection from any IP
+	local_address.sin_port = htons((u_short)20248); //Port to use
+
+	listening_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+	if( listening_socket == INVALID_SOCKET ) {
+		printf("Error in creating listening socket. Exiting in 2 seconds\n");
+		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		Sleep(2000);
+        return -2;
+	}
+
+	if( bind(listening_socket, (sockaddr*)&local_address, sizeof(local_address)) !=0 ) {
+		printf("\nError in binding the socket to the port 20248.\n");
+		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		Sleep(2000);
+        return -3;
+	}
+
+	u_long iMode = 1;
+
+	int iResult = ioctlsocket(listening_socket, FIONBIO, &iMode); //Third parameter != 0 means non blocking
+
+	if(iResult != NO_ERROR) {
+		printf("Error in setting listening socket as non blocking\n");
+		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		Sleep(2000);
+        return -4;
+	}
+
+    //listen instructs the socket to listen for incoming 
+    //connections from clients. The second arg is the backlog
+    if(listen(listening_socket, 10)!=0)
+    {
+		printf("Error in using the socket for listening. Exiting in 2 seconds\n");
+		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		Sleep(2000);
+        return -5;
+    }
+
 	// Initialization of the MSCopy status structure
 	gmcsMSCopyStatus.bLogFileMoveError = false;
 	gmcsMSCopyStatus.bLogFileMoveRecovery = false;
@@ -280,6 +336,54 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	pclfmLogFileMove = new CLogFileMove(&gmccMSCopyCfg);
 	// -> Writing of the status file
 	pswStatusWrite = new CStatusWrite(&gmccMSCopyCfg);
+
+
+	//Wait upto 5 seconds to establish a connection
+
+	fd_set rfds, wfds;
+
+	struct timeval tv;
+
+	FD_ZERO(&rfds);
+	FD_SET(listening_socket, &rfds);
+
+	FD_ZERO(&wfds);
+	FD_SET(listening_socket, &wfds);
+
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	printf("Waiting upto 5 seconds to receive a connection in the listening queue\n");
+
+	iResult = select(listening_socket + 1, &rfds, &wfds, NULL, &tv);
+	
+	client_socket = INVALID_SOCKET;
+	sockaddr_in client_addr;
+	int client_addr_len = sizeof(client_addr);
+
+	if(iResult == 1 && FD_ISSET(listening_socket, &rfds) ) {
+
+		//Socket is readable => there is atleast one complete connection in queue
+
+		client_socket = accept(listening_socket, (struct sockaddr*) &client_addr, &client_addr_len);
+
+		if(client_socket == INVALID_SOCKET) {
+			printf("Error in accepting the client connection\n");
+		} else {
+			printf("Connected successfully to a client\n");
+
+			int iResult = ioctlsocket(client_socket, FIONBIO, &iMode); //Third parameter != 0 means non blocking
+
+			if(iResult != NO_ERROR) {
+				printf("Error in setting client socket as non blocking\n");
+				printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+				Sleep(2000);
+				return -4;
+			}
+
+			printf("Succesfully set client socket as non blocking\n");
+		}
+	}
 	
 	// Waits for the next passage at 15s 0ms
 	ucRetValue = GetSleepDelayFromCurTime(0, &dwSleepDelay);
@@ -289,8 +393,12 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		sprintf(strTempString, "[MAIN] Wait for the next passage at 15s. Sleep delay = %d ms.", dwSleepDelay + 1000);
 		LogTrace(strTempString, 2);
 
+		printf("[MAIN] Wait for the next passage at 15s. Sleep delay = %d ms.\n", dwSleepDelay + 1000);
+
 		// Sleeps during the calculated time + 1s to take in account the lack
 		// of precision of the Windows CE timers
+		
+		//TODO: UNCOMMENT THIS LINE ********************************
 		Sleep(dwSleepDelay + 1000);
 
 		// After wakeup, in case of panel time synchronisation, checks if the 
@@ -298,6 +406,9 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		// passage at 15s one time.
 		GetSystemTime(&stimeGMTDateTime);
 
+		printf("Woke up at stime second: %d\n",stimeGMTDateTime.wSecond);
+			//TODO - UNCOMMENT THE FOLLOWING LINES ************************9
+		
 		if (!((stimeGMTDateTime.wSecond >= 15) && (stimeGMTDateTime.wSecond <= 30)))
 		{
 			// Exception: the status file writing is mandatory for the first
@@ -306,7 +417,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 			
 			// Calculates and applies the next sleep time
 			LogTrace("[MAIN] The wakeup time is not between 15s and 30s. Waits for the next passage at 15s", 1);
-			
+			printf("[MAIN] The wakeup time is not between 15s and 30s. Waits for the next passage at 15s\n");
 			ucRetValue = GetSleepDelayFromCurTime(0, &dwSleepDelay);
 			
 			if (ucRetValue == RET_OK)
@@ -339,6 +450,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 
 	// First execution of the 3 main cyclic treatments
 	// -> User file synchronisation
+	//TODO: UNCOMMMENT THE FOLLOWING LINE!
 	pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
 	// -> Moving of log files to server
 	pclfmLogFileMove->ExecuteTreatment(&gmcsMSCopyStatus);	
@@ -570,6 +682,92 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	LogTrace("[MAIN] MSCopy shutdown", 1);
 	return(0);
 }
+
+int SelectReadUptoNSeconds(SOCKET socket, int Nseconds) {
+
+		fd_set rfds;
+		struct timeval tv;
+
+		FD_ZERO(&rfds);
+		FD_SET(socket, &rfds);
+		
+		tv.tv_sec = Nseconds;
+		tv.tv_usec = 0;
+
+		int iRetSelect = select(socket + 1, &rfds, NULL, NULL, &tv);
+
+		return iRetSelect;
+}
+
+int Socket_Handshake() {
+
+	int iRetSelect;
+	int iRetRecv;
+	int iRetSend;
+	char temp[1024];
+
+	//Handshake Procedure
+
+	int rand_sent = rand() % 100;
+	
+	sprintf(temp, "%d", rand_sent);
+	
+	//Send random number
+	iRetSend = send(client_socket, temp, strlen(temp), 0);
+
+	if(iRetSend < 0) {
+		//Error in sending to the driver
+		//Close the connection.
+
+		printf("Error in sending random number for handshake\n");
+		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
+		return -1;
+	}
+
+	printf("Sent random number %d\n", rand_sent);
+
+	//Wait upto 5 seconds to receive random_number + 1;
+	iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+	if(iRetSelect <= 0) {
+		//Did not receive a reply from the driver
+		//Close the connection.
+		printf("Did not receive rand+1 within 5 seconds or error in select\n");
+		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
+		return -1;
+	}
+	
+	memset(temp, 0, sizeof(temp));
+	iRetRecv = recv(client_socket, temp, 3, 0);
+
+	if(iRetRecv <= 0) {
+		//Did not receive a reply from the driver
+		//Close the connection.
+		printf("recv: Error in receiving random number + 1 \n");
+		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
+		return -1;
+	}
+	
+	printf("Succesfully received %s\n", temp);
+
+	if(atoi(temp) != rand_sent + 1) {
+		//Received an invalid response. 
+		//Close the connection.
+		printf("recv: Received number is not equal to random number + 1 \n");
+		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
+		return -1;
+	}
+
+	printf("Success: Handshake completed\n");
+
+	//Handshake completed successfully
+	return 0;
+}
+
 
 /*********************************************************************/
 /* Function: ReadPanelIniFile                                        */

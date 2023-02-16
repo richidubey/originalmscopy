@@ -83,5 +83,7 @@ typedef struct
 // Global function prototypes
 unsigned char LogTrace(char *strMessage, unsigned char ucTraceLevel);
 unsigned char GetNextStartTime(unsigned long ulTimePeriodInMin, ULONGLONG *pul64NextStartTime);
+int SelectReadUptoNSeconds(SOCKET socket, int Nseconds);
+int Socket_Handshake();
 
 #endif MSCOPY_GLOBAL_H

@@ -1,13 +1,7 @@
-// CIniFile.h: interface for the CIniFile class.
-//
-//////////////////////////////////////////////////////////////////////
-
-#if !defined(AFX_CINIFILE_H__690B312C_24D2_4AA8_A781_AE2B291278BD__INCLUDED_)
-#define AFX_CINIFILE_H__690B312C_24D2_4AA8_A781_AE2B291278BD__INCLUDED_
-
 #if _MSC_VER > 1000
 #pragma once
 #endif // _MSC_VER > 1000
+
 
 class CIniFile  
 {
@@ -22,5 +16,3 @@ class CIniFile
 	private:
 		char m_strFilePath[200];
 };
-
-#endif // !defined(AFX_CINIFILE_H__690B312C_24D2_4AA8_A781_AE2B291278BD__INCLUDED_)

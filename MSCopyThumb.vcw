@@ -3,7 +3,19 @@ Microsoft eMbedded Visual Tools Workspace File, Format Version 3.00
 
 ###############################################################################
 
-Project: "MSCopy"=".\MSCopy.vcp" - Package Owner=<4>
+Project: "MSCopy"="..\MSCopy\MSCopy.vcp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+}}}
+
+###############################################################################
+
+Project: "MSCopyThumb"=".\MSCopyThumb.vcp" - Package Owner=<4>
 
 Package=<5>
 {{{

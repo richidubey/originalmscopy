@@ -3,38 +3,38 @@
 <pre>
 <h1>Build Log</h1>
 <h3>
---------------------Configuration: MSCopy - Win32 (WCE THUMB) Release--------------------
+--------------------Configuration: MSCopyThumb - Win32 (WCE THUMB) Debug--------------------
 </h3>
 <h3>Command Lines</h3>
-Creating command line "rc.exe /l 0x409 /fo"THUMBRel/MSCopy.res" /d UNDER_CE=300 /d _WIN32_WCE=300 /d "UNICODE" /d "_UNICODE" /d "NDEBUG" /d "UNKNOWN" /d "THUMB" /d "_THUMB_" /d "ARM" /d "_ARM_" /r "D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\MSCopy.rc"" 
-Creating temporary file "C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP81.tmp" with contents
+Creating command line "rc.exe /l 0x409 /fo"THUMBDbg/MSCopyThumb.res" /d UNDER_CE=300 /d _WIN32_WCE=300 /d "UNICODE" /d "_UNICODE" /d "DEBUG" /d "UNKNOWN" /d "THUMB" /d "_THUMB_" /d "ARM" /d "_ARM_" /r "C:\repos\mscopy\MSCopyThumb.rc"" 
+Creating temporary file "C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D5.tmp" with contents
 [
-/nologo /W3 /D _WIN32_WCE=300 /D "ARM" /D "_ARM_" /D "UNKNOWN" /D "THUMB" /D "_THUMB_" /D UNDER_CE=300 /D "UNICODE" /D "_UNICODE" /D "NDEBUG" /Fp"THUMBRel/MSCopy.pch" /Yu"stdafx.h" /Fo"THUMBRel/" /QRarch4T /QRinterwork-return /Oxs /MC /c 
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\CIniFile.cpp"
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\CLogFileMove.cpp"
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\CStatusWrite.cpp"
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\CUsrSynchro.cpp"
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\MSCopy.cpp"
+/nologo /W3 /Zi /Od /D "DEBUG" /D "THUMB" /D "_THUMB_" /D UNDER_CE=300 /D _WIN32_WCE=300 /D "ARM" /D "_ARM_" /D "UNKNOWN" /D "UNICODE" /D "_UNICODE" /Fp"THUMBDbg/MSCopyThumb.pch" /Yu"stdafx.h" /Fo"THUMBDbg/" /Fd"THUMBDbg/" /QRarch4T /QRinterwork-return /MC /c 
+"C:\repos\MSCopy\CIniFile.cpp"
+"C:\repos\MSCopy\CLogFileMove.cpp"
+"C:\repos\MSCopy\CStatusWrite.cpp"
+"C:\repos\MSCopy\CUsrSynchro.cpp"
+"C:\repos\mscopy\MSCopyThumb.cpp"
 ]
-Creating command line "clthumb.exe @C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP81.tmp" 
-Creating temporary file "C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP82.tmp" with contents
+Creating command line "clthumb.exe @C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D5.tmp" 
+Creating temporary file "C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D6.tmp" with contents
 [
-/nologo /W3 /D _WIN32_WCE=300 /D "ARM" /D "_ARM_" /D "UNKNOWN" /D "THUMB" /D "_THUMB_" /D UNDER_CE=300 /D "UNICODE" /D "_UNICODE" /D "NDEBUG" /Fp"THUMBRel/MSCopy.pch" /Yc"stdafx.h" /Fo"THUMBRel/" /QRarch4T /QRinterwork-return /Oxs /MC /c 
-"D:\Works\Projets\CERN\RAMSES\MSCopy\Code TP277\MSCopy\StdAfx.cpp"
+/nologo /W3 /Zi /Od /D "DEBUG" /D "THUMB" /D "_THUMB_" /D UNDER_CE=300 /D _WIN32_WCE=300 /D "ARM" /D "_ARM_" /D "UNKNOWN" /D "UNICODE" /D "_UNICODE" /Fp"THUMBDbg/MSCopyThumb.pch" /Yc"stdafx.h" /Fo"THUMBDbg/" /Fd"THUMBDbg/" /QRarch4T /QRinterwork-return /MC /c 
+"C:\repos\mscopy\StdAfx.cpp"
 ]
-Creating command line "clthumb.exe @C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP82.tmp" 
-Creating temporary file "C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP83.tmp" with contents
+Creating command line "clthumb.exe @C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D6.tmp" 
+Creating temporary file "C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D7.tmp" with contents
 [
-commctrl.lib coredll.lib toolhelp.lib /nologo /base:"0x00010000" /stack:0x10000,0x1000 /entry:"WinMainCRTStartup" /incremental:no /pdb:"THUMBRel/MSCopy.pdb" /nodefaultlib:"libc.lib /nodefaultlib:libcd.lib /nodefaultlib:libcmt.lib /nodefaultlib:libcmtd.lib /nodefaultlib:msvcrt.lib /nodefaultlib:msvcrtd.lib" /out:"THUMBRel/MSCopy.exe" /subsystem:windowsce,3.00 /MACHINE:THUMB 
-".\THUMBRel\CIniFile.obj"
-".\THUMBRel\CLogFileMove.obj"
-".\THUMBRel\CStatusWrite.obj"
-".\THUMBRel\CUsrSynchro.obj"
-".\THUMBRel\MSCopy.obj"
-".\THUMBRel\StdAfx.obj"
-".\THUMBRel\MSCopy.res"
+commctrl.lib coredll.lib toolhelp.lib winsock.lib /nologo /base:"0x00010000" /stack:0x10000,0x1000 /entry:"WinMainCRTStartup" /incremental:yes /pdb:"THUMBDbg/MSCopyThumb.pdb" /debug /nodefaultlib:"libc.lib /nodefaultlib:libcd.lib /nodefaultlib:libcmt.lib /nodefaultlib:libcmtd.lib /nodefaultlib:msvcrt.lib /nodefaultlib:msvcrtd.lib" /out:"THUMBDbg/MSCopyThumb.exe" /subsystem:windowsce,3.00 /MACHINE:THUMB 
+.\THUMBDbg\CIniFile.obj
+.\THUMBDbg\CLogFileMove.obj
+.\THUMBDbg\CStatusWrite.obj
+.\THUMBDbg\CUsrSynchro.obj
+.\THUMBDbg\MSCopyThumb.obj
+.\THUMBDbg\StdAfx.obj
+.\THUMBDbg\MSCopyThumb.res
 ]
-Creating command line "link.exe @C:\DOCUME~1\assystem\LOCALS~1\Temp\RSP83.tmp"
+Creating command line "link.exe @C:\DOCUME~1\ADMINI~1\LOCALS~1\Temp\RSP1D7.tmp"
 <h3>Output Window</h3>
 Compiling resources...
 Compiling...
@@ -44,15 +44,14 @@ CIniFile.cpp
 CLogFileMove.cpp
 CStatusWrite.cpp
 CUsrSynchro.cpp
-MSCopy.cpp
+MSCopyThumb.cpp
 Generating Code...
 Linking...
 
 
 
-
 <h3>Results</h3>
-MSCopy.exe - 0 error(s), 0 warning(s)
+MSCopyThumb.exe - 0 error(s), 0 warning(s)
 </pre>
 </body>
 </html>

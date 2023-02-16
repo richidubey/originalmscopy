@@ -26,6 +26,99 @@ CUsrSynchro::~CUsrSynchro()
 {
 }
 
+int CUsrSynchro::GetUserFile() {
+	
+	int iRetSelect;
+	int iRetRecv;
+	char temp[1025];
+
+	/*//Wait upto 5 seconds to receive UserFile
+	iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+	
+	if(iRetSelect <= 0) {
+		//Did not receive a reply from the driver
+		//Close the connection.
+		closesocket(client_socket);
+		client_socket = INVALID_SOCKET;
+		return -1;
+	}*/
+	
+	
+	strcpy(m_strUsrTempPathLocal, m_strUsrPathLocal); //Parameter: Destination, Source
+
+	//Replace User.dat with UserTemp.dat in the temp name. Find the location of last '/' first
+	int i;
+	for(i = strlen(m_strUsrTempPathLocal); i>=0 ; i--) {
+		if(m_strUsrTempPathLocal[i] == '\\') {
+			break;
+		}
+	}
+	strcpy(&m_strUsrTempPathLocal[i+1], "UserTemp.dat");
+
+	printf("Location of User file is :\n%s\n", m_strUsrPathLocal);
+	printf("Location of temp User file being created is :\n%s\n", m_strUsrTempPathLocal);
+
+	FILE *nfile = fopen(m_strUsrTempPathLocal ,"w");
+
+	printf("Received UserFileContent: \n\n");
+	char subtemp[8];
+
+	strcpy(subtemp, "Hello");
+	while(1) {
+		//Wait upto 5 seconds to receive UserFile content
+		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+		memset(temp, 0, sizeof(temp));
+		iRetRecv = recv(client_socket, temp, 1024, 0);
+
+		if(iRetRecv <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		if(iRetRecv == 1024) {
+			temp[1024] = '\0';
+		}
+
+		printf("%s\n",temp);
+
+		if(strlen(temp) >=9) {
+			//printf("The last 5 characters of the message is:\n");
+
+			//char r = '\0';
+			//printf("Printing null character looks like : %c\n",r);
+
+			//printf("Position %d : %c\n", strlen(temp)-1, temp[strlen(temp)-1]);
+			//printf("Position %d : %c\n", strlen(temp)-2, temp[strlen(temp)-2]);
+			//printf("Position %d : %c\n", strlen(temp)-3, temp[strlen(temp)-3]);
+			//printf("Position %d : %c\n", strlen(temp)-4, temp[strlen(temp)-4]);
+			//printf("Position %d : %c\n", strlen(temp)-5, temp[strlen(temp)-5]);
+		
+			printf("Strlen temp is :%d\n", strlen(temp));
+			memcpy(subtemp, &temp[strlen(temp) - 9], 7); //Destination, Source, size
+			//Account for 2 extra characters at the end.
+			subtemp[7] = '\0';
+
+			printf("\nLast 7 character of temp are:  %s\n",subtemp);
+		}
+
+		if( strcmp("##HSE##", subtemp) == 0 ) {
+			printf("Received the entire file\n");
+			temp[strlen(temp) - 9] = '\0';
+			fprintf(nfile, "%s", temp);
+			fclose(nfile);
+			break;
+		}
+
+		fprintf(nfile, "%s", temp);
+	}
+
+	return 0;
+}
+
 ///////////////////////////////////////////////////////////////////////
 // CIniFile member functions
 
@@ -49,193 +142,125 @@ CUsrSynchro::~CUsrSynchro()
 
 unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 {
-	bool bEndOfLocalFile;
-	bool bEndOfServerFile;
-	bool bReadErrorInLocalFile;
-	bool bReadErrorInServerFile;
-	bool bFilesAreIdentical;
 	bool bNeedToCopyServerFile;
 	unsigned char ucRetValue;
 	unsigned char ucRetValue2;
-	DWORD dwErrorCode;
 
-	HANDLE hSearchFile;
-	WIN32_FIND_DATA wfdFileData;
-	FILE *pfiLocalFile;
-	FILE *pfiServerFile;
+	int iRetSelect;
+	int iRetHandshake;
+	int iRetSend;
+
+	char temp[1024];
 
 	char strTempString[200];
-	char strTempString2[200];
 
 	bNeedToCopyServerFile = false;
 	ucRetValue = RET_OK;
+
+	bool skip_treatment= false;
+
+	sockaddr_in from;
+    int fromlen = sizeof(from);
+
+
+	printf("Inside User Synchronization Treatment\n");
+
+	if(client_socket == INVALID_SOCKET) {
+		
+		//Client is not connected. Wait upto 5 seconds on the listening queue
+
+		iRetSelect = SelectReadUptoNSeconds(listening_socket, 5);
+
+		printf("Client is not connected. Will wait upto 5 seconds for possible incoming connections\n");
+
+		if(iRetSelect > 0) {
+			client_socket = accept(listening_socket, (struct sockaddr*) &from, &fromlen); //Todo - Update the 2nd and 3rd parameter
+
+			if(client_socket > 0) {
+				printf("Succesfully connected to the driver within a 5 seconds wait \n");
+			} else {
+				//Could not connect to driver. Skip User Synchronization treatment.
+				printf("Error in accepting the client connection\n");
+				skip_treatment = true;
+			}
+		} else {
+			//Could not connect to driver. Skip User Synchronization treatment.
+			printf("No client connected in last 5 seconds or error in select\n");
+			skip_treatment = true;
+		}
+	}
+
+	if(!skip_treatment) {
+
+		printf("Starting treatment with handshake\n");
+
+		iRetHandshake = Socket_Handshake();
+
+		if(iRetHandshake == 0) {
+
+			printf("Handshake completed, Sending 'User' Message\n");
+
+			sprintf(temp, "User");
 	
-	// Checks if a local version of the user file version exists
-	hSearchFile = FindFirstFile(m_tstrUsrPathLocal, &wfdFileData);
+			//Send 'User' message to indicate start of User File Synchronization Treatment
+			iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-	if (hSearchFile == INVALID_HANDLE_VALUE)
-	{
-		// No local version found => copy of the reference file from
-		// server requested
-		dwErrorCode = GetLastError();
-		sprintf(strTempString, 
-				"[USR SYNC] Failed to find the local user file (win32 error code = %d). File copy requested.", 
-				dwErrorCode);
-		LogTrace(strTempString, 1);
+			printf("Mandatory 2 seconds wait\n");
+			Sleep(2000);
 
-		bNeedToCopyServerFile = true;
-	}
-	else
-	{
-		// Local user file found => compare data between local and server 
-		// file
-			
-		// Opening of the local file
-		pfiLocalFile = fopen(m_strUsrPathLocal, "r");
+			if(iRetSend > 0) {
+				if( GetUserFile() == 0) {
+					//User Temp file has been generated completely.
+					//Replace actual user file with the UserTemp file
 
-		if (pfiLocalFile != NULL)
-		{
-			// Opening of the server file
-			pfiServerFile = fopen(m_strUsrPathServer, "r");
-			
-			if (pfiServerFile != NULL)
-			{	
-				// Reset EOF and read error flags
-				bEndOfLocalFile = false;
-				bReadErrorInLocalFile = false;
-				bEndOfServerFile = false;
-				bReadErrorInServerFile = false;
-				
-				bFilesAreIdentical = true;
+					printf("Successfully received the entire file\n");
+					wsprintf(m_tstrUsrTempPathLocal, _T("%S"), m_strUsrTempPathLocal);
+					if ( CopyFile(m_tstrUsrTempPathLocal, m_tstrUsrPathLocal,FALSE) ) { //Source, Destination, FailIfExists
+						pmcsMSCopyStatus->bUsrSynchroError = false;
+						printf("Successfully replaced the original user file with the temporary file\n");
+						printf("Mandatory 2 second sleep\n");
+						Sleep(2000);
 
-				// Comparison of each line read from the 2 files
-				while(!(bEndOfLocalFile || bReadErrorInLocalFile
-					  || bEndOfServerFile || bReadErrorInServerFile))
-				{
-					// Buffer data reset
-					strTempString[0] = '\0';
-					strTempString2[0] = '\0';
-							
-					// Reading of one line in each file
-					if (fgets(strTempString, 200, pfiLocalFile) == NULL)
-					{
-						// End of file or error found
-						if (feof(pfiLocalFile))
-						{
-							bEndOfLocalFile = true;
-						}
-						else
-						{
-							bReadErrorInLocalFile = true;
-							LogTrace("[USR SYNC] Local user file reading error", 1);
-						}
+					} else {
+						//Error in replacing original user file with the temporary file
+						printf("Error in replacing original user file with the temporary file\nError Code: %d\n\n", GetLastError());
+						pmcsMSCopyStatus->bUsrSynchroError = true;
+						ucRetValue = RET_ERR_USR_FILE_COPY;
 					}
-
-					if (fgets(strTempString2, 200, pfiServerFile) == NULL)
-					{
-						// End of file or error found
-						if (feof(pfiServerFile))
-						{
-							bEndOfServerFile = true;
-						}
-						else
-						{
-							bReadErrorInServerFile = true;
-							LogTrace("[USR SYNC] Server user file reading error", 1);
-						}
-					}						
-					
-					// If file reading interrupted, checks if it's
-					// necessary to synchronize the data
-					if ((bEndOfLocalFile == !bEndOfServerFile)
-						|| (bReadErrorInLocalFile == true)
-						|| (bReadErrorInServerFile == true))
-					{
-						// Different number of lines between files or 
-						// reading error found (impossible to compare next
-						// data) => need to synchronize user data
-						bFilesAreIdentical = false;
-						bNeedToCopyServerFile = true;
-					}
-					else
-					{
-						// Comparison of the read lines
-						if ((bEndOfLocalFile == false) && (bEndOfServerFile == false))
-						{
-							if (strcmp(strTempString, strTempString2) != 0)
-							{
-								// Difference found => need to synchronize user data
-								bFilesAreIdentical = false;
-								bNeedToCopyServerFile = true;
-								break;
-							}
-						}
-					}
+				} else {
+					printf("Error in getting User File from peer\n");
+					pmcsMSCopyStatus->bUsrSynchroError = true;
+					ucRetValue = RET_ERR_USR_FILE_COPY;
 				}
-				
-				// Reset the user synchronisation default if necessary, and display
-				// traces
-				if (bFilesAreIdentical)
-				{
-					// Reset the user file synchronisation default
-					pmcsMSCopyStatus->bUsrSynchroError = false;
-					LogTrace("[USR SYNC] Local and server user files are identical. File copy not requested.", 2);
-				}
-				else
-				{
-					LogTrace("[USR SYNC] Local and server user files are not identical. File copy requested.", 2);
-				}
-
-				fclose(pfiServerFile);
+			} else {
+				//Error in sending 'User' message to the driver
+				//Close the connection.
+				printf("Error in sending 'User' message to peer to start User file exchange");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				pmcsMSCopyStatus->bUsrSynchroError = true;
+				ucRetValue = RET_ERR_USR_FILE_COPY;
 			}
-			else
-			{
-				// Opening of the server file failed
-				bNeedToCopyServerFile = true;
-				LogTrace("[USR SYNC] Opening of the server user file for comparison failed. File copy requested.", 2);
-			}
-			
-			fclose(pfiLocalFile);
-		}
-		else
-		{
-			// Opening of the local file failed
-			bNeedToCopyServerFile = true;
-			LogTrace("[USR SYNC] Opening of the local user file for comparison failed. File copy requested.", 2);
-		}
-
-		FindClose(hSearchFile);
-	}
-
-	// Copy of the server file to the local directory if requested
-	if (bNeedToCopyServerFile)
-	{
-		if (CopyFile(m_tstrUsrPathServer, m_tstrUsrPathLocal, FALSE))
-		{
-			// File copy succeeded
-			LogTrace("[USR SYNC] User file copy from server OK", 2);
-
-			// Reset the user file synchronisation default
-			pmcsMSCopyStatus->bUsrSynchroError = false;
-		}
-		else
-		{
-			// File copy failed
-			dwErrorCode = GetLastError();
-			sprintf(strTempString, 
-					"[USR SYNC] Failed to copy the user file from server (win32 error code = %d)", 
-					dwErrorCode);
-			LogTrace(strTempString, 1);
-
-			// Set the user file synchronisation default
+		} else {
+			//Error in handshake.
+			//Close the connection.
+			printf("Error in application level socket handshake with the peer\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
 			pmcsMSCopyStatus->bUsrSynchroError = true;
-			
 			ucRetValue = RET_ERR_USR_FILE_COPY;
 		}
+	} else {
+		pmcsMSCopyStatus->bUsrSynchroError = true;
 	}
 
-	// Calculate the next treatement start time
-	ucRetValue2 = GetNextStartTime(m_ulTimePeriod, &m_ul64NextStartTime);
+	if(pmcsMSCopyStatus->bUsrSynchroError) {
+		// If there is a failure in Synchronization, Retry treatment in 1 minute
+		ucRetValue2 = GetNextStartTime(1, &m_ul64NextStartTime);
+	} else {
+		ucRetValue2 = GetNextStartTime(m_ulTimePeriod, &m_ul64NextStartTime);
+		printf("User Synchronization completed succesfully\n");
+	}
 		
 	if (ucRetValue2 != RET_OK)
 	{

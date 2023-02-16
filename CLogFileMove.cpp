@@ -13,8 +13,6 @@ CLogFileMove::CLogFileMove(tstMSCopyCfg* pmccMSCopyCfg)
 {
 	// Initialization of member variables 
 	m_ul64NextStartTime = 0;
-	m_ul64NextSwitchToServer1 = 0;
-	m_ucCurServer = SERVER1;
 
 	m_ulMovePeriod = pmccMSCopyCfg->lMovePeriod;
 	m_ulSrvScrutingDelay = pmccMSCopyCfg->lSrvScrutingDelay;
@@ -22,19 +20,468 @@ CLogFileMove::CLogFileMove(tstMSCopyCfg* pmccMSCopyCfg)
 	
 	// Type conversion char to TCHAR
 	wsprintf(m_tstrMeasPathLocal, _T("%S"), pmccMSCopyCfg->strMeasPathLocal);
-	wsprintf(m_tstrMeasPathServer1, _T("\\\\%S\\%S"), pmccMSCopyCfg->strServerName1, pmccMSCopyCfg->strMeasPathServer);
-	wsprintf(m_tstrMeasPathServer2, _T("\\\\%S\\%S"), pmccMSCopyCfg->strServerName2, pmccMSCopyCfg->strMeasPathServer);
 	wsprintf(m_tstrEvtPathLocal, _T("%S"), pmccMSCopyCfg->strEvtPathLocal);
-	wsprintf(m_tstrEvtPathServer1, _T("\\\\%S\\%S"), pmccMSCopyCfg->strServerName1, pmccMSCopyCfg->strEvtPathServer);
-	wsprintf(m_tstrEvtPathServer2, _T("\\\\%S\\%S"), pmccMSCopyCfg->strServerName2, pmccMSCopyCfg->strEvtPathServer);
-
-	// Server name extraction
-	strcpy(m_strNameServer1, pmccMSCopyCfg->strServerName1);
-	strcpy(m_strNameServer2, pmccMSCopyCfg->strServerName2);
 }
 
 CLogFileMove::~CLogFileMove()
 {
+}
+
+int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, unsigned long MaxNbOfFilToeMove){
+	
+	int sCount;
+	unsigned long ulNbOfFileMoved;
+	
+	int iRetSend;
+	int iRetSelect;
+	int iRetRecv;
+
+	FILE *fp;
+
+	char temp[1024];
+	char subtemp[10];
+
+	TCHAR tstrTempString[100];
+	char strTempString[100];
+
+	ulNbOfFileMoved = 0;
+
+	for(sCount = fCount - 1; sCount >= 0; sCount--) //Send files if fcount!=0 
+	{
+		/*
+				Send Filename
+					|
+					v
+				Wait for confirmation.
+				After receiving Confirmation
+					|
+					v
+				Send File content
+					|
+					v
+				Send EOF marker
+					|
+					v
+				Wait for confirmation
+					|
+					v
+				Delete File.
+		*/
+		//////////////////
+
+		printf("(Telnet)Random Check: Before sending Final Marker, checking if I can receive something from socket already\n");
+			
+		//Wait upto 5 seconds to receive confirmation
+		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+		
+		if(iRetSelect <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("(Telnet) Did not receive any message within 5 seconds or error in select\n");
+
+		} else {
+			printf("(Telnet) Yes, we can receive\n");
+			recv(client_socket, temp, 10, 0);
+
+			printf("(Telnet) Received: %s\nMandatory 3 seconds sleep\n", temp);
+			Sleep(3000);
+		}
+
+		//////////////////////////
+
+		printf("Sending name: %S\n", fileToSend[sCount]);
+
+		sprintf(temp, "%S", fileToSend[sCount]);
+
+		//Send filename to driver
+		iRetSend = send(client_socket, temp, strlen(temp), 0);
+
+		if(iRetSend <= 0) {
+			//Error in sending filename. Abort this Log File Movement treatment.
+			printf("Error in sending filename.\n");
+			return -1; 
+		}
+
+		printf("Going to wait for confirmation  Mandatory 5 second wait\n");
+		Sleep(5);
+
+		//Wait upto 5 seconds to receive confirmation
+		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+		if(iRetSelect <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("Did not receive any message within 5 seconds or error in select\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		memset(temp, 0, sizeof(temp));
+		iRetRecv = recv(client_socket, temp, 10, 0);
+
+		if(iRetRecv <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("recv: Error in receiving confirmation\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+		
+		printf("Succesfully received %s\n", temp);
+		
+		if(strlen(temp) < 9) {
+			//Message size less than expected. Received an invalid confirmation.
+			printf("Invalid confirmation message from client. Abort connection\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		memcpy(subtemp, &temp[strlen(temp) - 9], 7); 
+		subtemp[7] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+
+		if( strcmp("##HSE##", subtemp) != 0 ) {
+			//Received an invalid confirmation. 
+			printf("Invalid confirmation message from client. Abort connection\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		lstrcpy(tstrTempString, tstrDirPath);
+		lstrcat(tstrTempString, _T("\\"));
+		lstrcat(tstrTempString, fileToSend[sCount]);
+
+		sprintf(strTempString, "%S", tstrTempString);
+
+		printf("Trying to open in read mode: \n%s\n", strTempString);
+
+		fp = fopen(strTempString, "r");
+
+		if(fp == NULL) {
+			//Opening file to read failed. Skip this file
+			printf("Opening file in read mode failed. Skip this file\nError code is %d\n", GetLastError());
+
+			//Send final marker to indicate EOF.
+			sprintf(temp, "**HSE**");
+			iRetSend = send(client_socket, temp, strlen(temp), 0);
+
+			if(iRetSend <= 0) {
+				//Error in sending final marker. Abort this Log File Movement treatment.
+				printf("Error in sending final marker.\n");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				return -1; 
+			}
+
+			printf("Mandatory 4 seconds sleep\n");
+			Sleep(4000);
+			continue;
+		}
+
+		while(fgets(temp, sizeof(temp), fp)) {
+			printf("Line read:\n %s",temp);
+
+			iRetSend = send(client_socket, temp, strlen(temp), 0);
+			
+			if(iRetSend <= 0) {
+				//Error in sending file content. Abort this Log File Movement treatment.
+				printf("Error in sending file content.\n");
+				return -1; 
+			}
+		}
+		//Finished sending file. Send marker
+
+		//////////////////
+
+		printf("Before sending Final Marker, checking if I can receive something from socket already\n");
+			
+		//Wait upto 5 seconds to receive confirmation
+		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+		
+		if(iRetSelect <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("Did not receive any message within 5 seconds or error in select\n");
+		} else {
+			printf("Yes, we can receive\n");
+			recv(client_socket, temp, 10, 0);
+
+			printf("Received: %s\nMandatory 3 seconds sleep\n", temp);
+			Sleep(3000);
+		}
+
+		//////////////////////////
+
+		sprintf(temp, "**HSE**");
+		iRetSend = send(client_socket, temp, strlen(temp), 0);
+
+		if(iRetSend <= 0) {
+			//Error in sending final marker. Abort this Log File Movement treatment.
+			printf("Error in sending final marker.\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1; 
+		}
+
+		
+		printf("(Debug) Going to wait for confirmation mandatory 5 second wait\n");
+		Sleep(5);
+
+		//Wait upto 5 seconds to receive confirmation from the driver
+		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+		if(iRetSelect <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("Did not receive any message within 5 seconds or error in select\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		memset(temp, 0, sizeof(temp));
+		iRetRecv = recv(client_socket, temp, 10, 0);
+
+		if(iRetRecv <= 0) {
+			//Did not receive a reply from the driver
+			//Close the connection.
+			printf("recv: Error in receiving confirmation\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+		
+		printf("Succesfully received %s\n", temp);
+		
+		if(strlen(temp) < 9) {
+			//Message size less than expected. Received an invalid confirmation.
+			printf("Invalid confirmation message from client. Abort connection\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		memcpy(subtemp, &temp[strlen(temp) - 9], 7); 
+		subtemp[7] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+
+		if( strcmp("##HSE##", subtemp) != 0 ) {
+			//Received an invalid confirmation. 
+			printf("Invalid confirmation message from client. Abort connection\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			return -1;
+		}
+
+		//Final marker received from client. Delete the file.
+
+		fclose(fp);
+
+		if(DeleteFile(tstrTempString) == 0) {
+			//Error in deleting file
+			printf("Error in deleting file. Error code: %d\n", GetLastError());
+		}
+
+		ulNbOfFileMoved = ulNbOfFileMoved + 1;
+
+		if(ulNbOfFileMoved == MaxNbOfFileToMove) 
+			break;
+	}
+
+	return ulNbOfFileMoved;
+}
+
+unsigned int CLogFileMove::SendMeasFiles(tstMSCopyStatus* pmcsMSCopyStatus) {
+	
+	// -> Sends the requested number of the oldest files (if sufficient number of files stored
+	//    in flash card)
+
+	HANDLE hSearchFile;
+	TCHAR tstrTempString[100];
+	TCHAR tstrDirPath[100];
+	SYSTEMTIME stimeGMTCurTime;
+	FILETIME ftimeGMTCurTime;
+
+	ULONGLONG ul64GMTCurTime;
+	ULONGLONG ul64GMTFileWTime;
+	ULONGLONG ul64CurTimeFileWTimeDiff;
+
+	unsigned long ulTotNbOfFileMoved;
+	unsigned long ulNbOfFileMoved;
+
+	WIN32_FIND_DATA ffd;
+
+	TCHAR fileToSend[720][25];
+
+	int fCount;
+
+	ulTotNbOfFileMoved = 0;
+
+	// Browses the MSLog directories from "1" (most recent files) to "11" (oldest files)
+	for (unsigned char i = 1; i < 12; i++)
+	{
+		fCount = 0;
+		
+		lstrcpy(tstrDirPath, m_tstrMeasPathLocal);
+		wsprintf(tstrTempString, _T("\\%d"), i);
+		lstrcat(tstrDirPath, tstrTempString);
+		
+		lstrcpy(tstrTempString, tstrDirPath);
+		lstrcat(tstrTempString, _T("\\*.log"));
+
+		printf("Checking files in folder num %d and full path is \n%S\n",i, tstrTempString);
+
+		printf("Mandatory 2 second sleep\n");
+		Sleep(2000);
+		
+		// In the current directory, searches log file names sorted by alphabetic order to browse 
+		// it from the oldest to the more recent file
+		hSearchFile = FindFirstFile(tstrTempString, &ffd);
+
+		if (hSearchFile != INVALID_HANDLE_VALUE)
+		{
+
+			do{
+				if(i == 1) { //Check file write time only for the first folder
+					GetSystemTime(&stimeGMTCurTime);
+					if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) != FALSE) {
+
+						ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
+						ul64GMTFileWTime = (((ULONGLONG)(ffd.ftLastWriteTime.dwHighDateTime)) << 32) + ffd.ftLastWriteTime.dwLowDateTime;
+
+						if (CompareFileTime(&(ffd.ftLastWriteTime), &ftimeGMTCurTime) == -1) {	
+							ul64CurTimeFileWTimeDiff = ul64GMTCurTime - ul64GMTFileWTime;
+						}
+						else {	
+							ul64CurTimeFileWTimeDiff = ul64GMTFileWTime - ul64GMTCurTime;
+						}
+
+						if (ul64CurTimeFileWTimeDiff > 5 * SECOND_100NS) {
+							
+							printf("File modification time correct, increasing file count\n");
+							lstrcpy(fileToSend[fCount], ffd.cFileName);
+							fCount++;
+
+						} else {
+							printf("***Modified time of this file in last 5 seconds skipping this file\n");
+							printf("Name of the file was: %S\n",ffd.cFileName);
+						}
+					} else {
+						printf("Could not convert SystemTime to FileTime, Send current file\n");
+						lstrcpy(fileToSend[fCount], ffd.cFileName);
+						fCount++;
+						}
+				} else {
+					//We dont need to check file modification time for files in other folders.
+					lstrcpy(fileToSend[fCount], ffd.cFileName);
+					fCount++; }
+			} while ( FindNextFile(hSearchFile, &ffd) == TRUE);
+		} else {
+			//No file in this folder
+				printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
+				Sleep(2000);
+		
+			printf("There are no files in folder %d or error code is %d\n", i, GetLastError());
+		}
+
+		printf("Sending %d files from this folder\n", fCount);
+
+		ulNbOfFileMoved = SendFilesOverSocket(fCount, fileToSend, tstrDirPath, m_ulSuccessiveMove - ulTotNbOfFileMoved);
+		
+		if( ulNbOfFileMoved < 0 ) {
+			return -1;
+		}
+
+		ulTotNbOfFileMoved = ulTotNbOfFileMoved + ulNbOfFileMoved;
+
+		if( ulTotNbOfFileMoved == m_ulSuccessiveMove ) { 
+			pmcsMSCopyStatus->bLogFileMoveRecovery = true;	
+			break;
+		}
+	}
+
+	return 0;
+}
+
+unsigned int CLogFileMove::SendEventFiles(tstMSCopyStatus* pmcsMSCopyStatus)
+{
+	HANDLE hSearchFile;
+	TCHAR tstrTempString[100];
+	SYSTEMTIME stimeGMTCurTime;
+	FILETIME ftimeGMTCurTime;
+
+	unsigned long ulNbOfFileMoved;
+
+	ULONGLONG ul64GMTCurTime;
+	ULONGLONG ul64GMTFileWTime;
+	ULONGLONG ul64CurTimeFileWTimeDiff;
+
+	WIN32_FIND_DATA ffd;
+
+	TCHAR fileToSend[720][25];
+	int fCount;
+
+	fCount = 0;
+	lstrcpy(tstrTempString, m_tstrEvtPathLocal);
+	lstrcat(tstrTempString, _T("\\*.log"));
+
+	printf("Checking files in folder\n%S\nMandatory 2 second sleep\n", tstrTempString);
+	Sleep(2000);
+		
+	// In the current directory, searches log file names sorted by alphabetic order to browse 
+	// it from the oldest to the more recent file
+	hSearchFile = FindFirstFile(tstrTempString, &ffd);
+
+	if (hSearchFile != INVALID_HANDLE_VALUE){
+		do{
+			GetSystemTime(&stimeGMTCurTime);
+
+			if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) != FALSE) {
+
+				ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
+				ul64GMTFileWTime = (((ULONGLONG)(ffd.ftLastWriteTime.dwHighDateTime)) << 32) + ffd.ftLastWriteTime.dwLowDateTime;
+
+				if (CompareFileTime(&(ffd.ftLastWriteTime), &ftimeGMTCurTime) == -1) {	
+					ul64CurTimeFileWTimeDiff = ul64GMTCurTime - ul64GMTFileWTime;
+				}
+				else {	
+					ul64CurTimeFileWTimeDiff = ul64GMTFileWTime - ul64GMTCurTime;
+				}
+
+				if (ul64CurTimeFileWTimeDiff > 60 * SECOND_100NS) {
+					printf("File modification time correct, increasing file count\n");
+					lstrcpy(fileToSend[fCount], ffd.cFileName);
+					fCount++;
+				} else {
+					printf("***Modified time of this file in last 60 seconds skipping this file\n");
+					printf("Name of the file was: %S\n",ffd.cFileName);
+				}
+			} else {
+				printf("Could not convert SystemTime to FileTime, Send current file\n");
+				lstrcpy(fileToSend[fCount], ffd.cFileName);
+				fCount++;
+				}
+		} while ( FindNextFile(hSearchFile, &ffd) == TRUE);
+	} else {
+		//No file in this folder
+		printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
+		Sleep(2000);
+		printf("There are no files in the events folder\n");
+	}
+
+	ulNbOfFileMoved = SendFilesOverSocket(fCount, fileToSend, tstrDirPath, m_ulSuccessiveMove);
+		
+	if( ulNbOfFileMoved < 0 ) {
+		return -1;
+	}
+
+	if( ulNbOfFileMoved == m_ulSuccessiveMove ) { 
+		pmcsMSCopyStatus->bLogFileMoveRecovery = true;
+	}
+
+	return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -62,404 +509,127 @@ CLogFileMove::~CLogFileMove()
 
 unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 {
-	unsigned char i;
-	unsigned char ucRet;
+
+	unsigned char ucRet, ucRetValue;
 	unsigned long ulNbOfMeasFileMoved;
 	unsigned long ulNbOfEvtFileMoved;
-	bool bOtherFilesToMoveInCurDir;
 
-	HANDLE hSearchFile;
-	WIN32_FIND_DATA wfdFileData;
-	SYSTEMTIME stimeGMTCurTime;
-	FILETIME ftimeGMTCurTime;
-	ULONGLONG ul64GMTCurTime;
-	ULONGLONG ul64GMTFileWTime;
-	ULONGLONG ul64CurTimeFileWTimeDiff;
+	int iRetHandshake;
+	int iRetSend;
+
+	char temp[1024];
 
 	char strTempString[200];
-	TCHAR tstrTempString[100];
-	TCHAR tstrDirPath[100];
-
-	// Checks if the switch to server 1 is needed
-	if (m_ucCurServer == SERVER2)
-	{
-		GetSystemTime(&stimeGMTCurTime);
-		if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-		{
-			LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. The current server remains Server 2", 1);
-		}
-		else
-		{
-			ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
-			
-			if (ul64GMTCurTime >= m_ul64NextSwitchToServer1)
-			{
-				m_ucCurServer = SERVER1;
-			}
-		}
-	}
+	bool skip_treatment = false;
 	
+	sockaddr_in from;
+    int fromlen = sizeof(from);
+
+
+	printf("Inside Log File Move Treatment\n");
+
 	// Status and flag initialization
-	pmcsMSCopyStatus->bLogFileMoveRecovery = false;
+	pmcsMSCopyStatus->bLogFileMoveError = false;
 	ulNbOfMeasFileMoved = 0;
 	ulNbOfEvtFileMoved = 0;
 
-	// MEASURE LOG FILES
-	
-	// -> Moves the requested number of the oldest files (if sufficient number of files stored
-	//    in flash card)
+	if(client_socket == INVALID_SOCKET) {
+		//Client is not connected. Wait upto 5 seconds on the listening queue
+		printf("Client is not connected. Wait upto 5 seconds on the listening queue\n");
+		int iRetSelect = SelectReadUptoNSeconds(listening_socket, 5);
 
-	// Browses the MSLog directories from "11" (oldest files) to "1" (more recent files)
-	for (i = 11; i > 0; i--)
-	{
-		lstrcpy(tstrDirPath, m_tstrMeasPathLocal);
-		wsprintf(tstrTempString, _T("\\%d"), i);
-		lstrcat(tstrDirPath, tstrTempString);
-		
-		lstrcpy(tstrTempString, tstrDirPath);
-		lstrcat(tstrTempString, _T("\\*.log"));
-		
-		// In the current directory, searches log file names sorted by alphabetic order to browse 
-		// it from the oldest to the more recent file
-		hSearchFile = FindFirstFile(tstrTempString, &wfdFileData);
-
-		if (hSearchFile != INVALID_HANDLE_VALUE)
-		{
-			// The 1st file is found. 
+		if(iRetSelect > 0) {
+			client_socket = accept(listening_socket, (struct sockaddr*) &from, &fromlen);
 			
-			// Checks if its last write time is different than the current time
-			// (<=> time difference >= 1s)
-			GetSystemTime(&stimeGMTCurTime);
-			if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-			{
-				LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
+			if(client_socket > 0) {
+				printf("Succesfully connected to the driver within a 5 seconds wait \n");
+			} else {
+				//Could not accept connection to driver. Skip User Synchronization treatment.
+				printf("Could not accept connection to driver. Skip Log File Synchronization treatment.\n");
+				skip_treatment = true;
+				pmcsMSCopyStatus->bLogFileMoveError = true;
 			}
-			else
-			{
-				if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) != 0)
-				{
-					// Moves it to server
-					ucRet = MoveLogFiles(tstrDirPath, wfdFileData.cFileName, MEASURE);
-
-					if (ucRet == RET_OK)
-					{
-						ulNbOfMeasFileMoved++;
-					}
-					else
-					{
-						pmcsMSCopyStatus->bLogFileMoveError = true;
-						strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-						FindClose(hSearchFile);
-						return(ucRet);
-					}
-				}
-			}
-
-			// Searches the requested number of next files if existing and moves them to server
-			bOtherFilesToMoveInCurDir = true;
-			while ((bOtherFilesToMoveInCurDir == true) && (ulNbOfMeasFileMoved < m_ulSuccessiveMove))
-			{
-				if (FindNextFile(hSearchFile, &wfdFileData) != FALSE)
-				{
-					// The next file is found
-
-					// Checks if its last write time is different than the current time 
-					// (<=> time difference >= 1s)
-					GetSystemTime(&stimeGMTCurTime);
-					if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-					{
-						LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
-					}
-					else
-					{
-						if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) != 0)
-						{
-							// Moves it to server					
-							ucRet = MoveLogFiles(tstrDirPath, wfdFileData.cFileName, MEASURE);
-
-							if (ucRet == RET_OK)
-							{
-								ulNbOfMeasFileMoved++;
-							}
-							else
-							{
-								pmcsMSCopyStatus->bLogFileMoveError = true;
-								strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-								FindClose(hSearchFile);
-								return(ucRet);
-							}
-						}
-					}
-				}
-				else
-				{
-					bOtherFilesToMoveInCurDir = false;
-				}
-			}
-
-			FindClose(hSearchFile);
-			
-			// If the threshold of moved files is reached, the MSLog directories browsing is
-			// stopped. Otherwise, all files stored in the current directory have been moved so
-			// it's necessary to browse the next directory.
-			if (ulNbOfMeasFileMoved == m_ulSuccessiveMove)
-			{
-				break;
-			}
+		} else {
+			//Could not connect to driver. Skip User Synchronization treatment.
+			printf("Could not connect to driver in last 5 seconds. Skip Log File Synchronization treatment.");
+			skip_treatment = true;
+			pmcsMSCopyStatus->bLogFileMoveError = true;
 		}
 	}
-				
-	// -> Move the most recent file
-	if (ulNbOfMeasFileMoved == m_ulSuccessiveMove)
-	{
-		lstrcpy(tstrDirPath, m_tstrMeasPathLocal);
-		wsprintf(tstrTempString, _T("\\1"), i);
-		lstrcat(tstrDirPath, tstrTempString);
-		
-		lstrcpy(tstrTempString, tstrDirPath);
-		lstrcat(tstrTempString, _T("\\*.log"));
-		
-		hSearchFile = FindFirstFile(tstrTempString, &wfdFileData);
 
-		// In the directory "1", searches log file names sorted by alphabetic order and moves 
-		// the last file which is the more recent
-		if (hSearchFile != INVALID_HANDLE_VALUE)
-		{
-			while (FindNextFile(hSearchFile, &wfdFileData) != FALSE);
+	if(!skip_treatment) {
 
-			// Checks if the last file write time is different than the current time
-			// (<=> time difference >= 1s)
-			GetSystemTime(&stimeGMTCurTime);
-			if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-			{
-				LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
-			}
-			else
-			{
-				if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) != 0)
-				{
-					// Moves it to server
-					ucRet = MoveLogFiles(tstrDirPath, wfdFileData.cFileName, MEASURE);
+		iRetHandshake = Socket_Handshake();
 
-					if (ucRet == RET_OK)
-					{
-						ulNbOfMeasFileMoved++;
-					}
-					else
-					{
-						pmcsMSCopyStatus->bLogFileMoveError = true;
-						strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-						FindClose(hSearchFile);
-						return(ucRet);
-					}
-				}
-			}
+		if(iRetHandshake == 0) {
 
-			FindClose(hSearchFile);
-		}
-	}
+			sprintf(temp, "LogFile");
 	
-	// EVENT LOG FILES
+			//Send 'LogFile' message to indicate start of Log File Move Treatment
+			printf("To peer send 'LogFile' message to indicate start of Log File Move Treatment\n");
+			iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-	// -> Move the requested number of the oldest files (if sufficient number of files stored 
-	//	  in flash card)
-	
-	lstrcpy(tstrTempString, m_tstrEvtPathLocal);
-	lstrcat(tstrTempString, _T("\\*.log"));
-		
-	hSearchFile = FindFirstFile(tstrTempString, &wfdFileData);
+			printf("Mandatory 2 seconds wait\n");
+			Sleep(2000);
 
-	// In the local event directory, searches log file names sorted by alphabetic order to browse 
-	// it from the oldest to the more recent file
-	if (hSearchFile != INVALID_HANDLE_VALUE)
-	{
-		// The 1st file is found
+			if(iRetSend > 0) {
+				if( SendMeasFiles(pmcsMSCopyStatus) == 0) {
+					//Mesaurement files sent succesfully. Send log files now.
+					printf("Measurement files sent successfully\n");
+					if(SendEventFiles(pmcsMSCopyStatus)==0) {
+						//Both measurement and event files sent successfully. 
 
-		// Checks if the time difference between last file write time and current time is more
-		// than 1min
-		GetSystemTime(&stimeGMTCurTime);
-		if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-		{
-			LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
-		}
-		else
-		{
-			ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
-			ul64GMTFileWTime = (((ULONGLONG)(wfdFileData.ftLastWriteTime.dwHighDateTime)) << 32) + wfdFileData.ftLastWriteTime.dwLowDateTime;
-			
-			if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) == -1)
-			{	
-				ul64CurTimeFileWTimeDiff = ul64GMTCurTime - ul64GMTFileWTime;
-			}
-			else
-			{	
-				ul64CurTimeFileWTimeDiff = ul64GMTFileWTime - ul64GMTCurTime;
-			}
+						sprintf(temp, "**HSE**");
+						iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-			if (ul64CurTimeFileWTimeDiff > MINUTE_100NS)		
-			{
-				// Moves it to server
-				ucRet = MoveLogFiles(m_tstrEvtPathLocal, wfdFileData.cFileName, EVENT);
-
-				if (ucRet == RET_OK)
-				{
-					ulNbOfEvtFileMoved++;
-				}
-				else
-				{
-					pmcsMSCopyStatus->bLogFileMoveError = true;
-					strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-					FindClose(hSearchFile);
-					return(ucRet);
-				}
-			}
-		}
-
-		// Searches the requested number of next files if existing and moves them to server
-		bOtherFilesToMoveInCurDir = true;
-		while ((bOtherFilesToMoveInCurDir == true) && (ulNbOfEvtFileMoved < m_ulSuccessiveMove))
-		{
-			if (FindNextFile(hSearchFile, &wfdFileData) != FALSE)
-			{
-				// The next file is found
-
-				// Checks if the time difference between last file write time and current time is more
-				// than 1min
-				GetSystemTime(&stimeGMTCurTime);
-				if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-				{
-					LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
-				}
-				else
-				{
-					ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
-					ul64GMTFileWTime = (((ULONGLONG)(wfdFileData.ftLastWriteTime.dwHighDateTime)) << 32) + wfdFileData.ftLastWriteTime.dwLowDateTime;
-					
-					if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) == -1)
-					{	
-						ul64CurTimeFileWTimeDiff = ul64GMTCurTime - ul64GMTFileWTime;
-					}
-					else
-					{	
-						ul64CurTimeFileWTimeDiff = ul64GMTFileWTime - ul64GMTCurTime;
-					}
-
-					if (ul64CurTimeFileWTimeDiff > MINUTE_100NS)		
-					{
-						// Moves it to server
-						ucRet = MoveLogFiles(m_tstrEvtPathLocal, wfdFileData.cFileName, EVENT);
-
-						if (ucRet == RET_OK)
-						{
-							ulNbOfEvtFileMoved++;
-						}
-						else
-						{
+						if(iRetSend <= 0) {
+							//Error in sending final marker. Abort this Log File Movement treatment.
+							printf("Error in sending final marker.\n");
+							closesocket(client_socket);
+							client_socket = INVALID_SOCKET;
 							pmcsMSCopyStatus->bLogFileMoveError = true;
-							strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-							FindClose(hSearchFile);
-							return(ucRet);
+						} else {
+							pmcsMSCopyStatus->bLogFileMoveError = false;
 						}
-					}
-				}
-			}
-			else
-			{
-				bOtherFilesToMoveInCurDir = false;
-			}
-		}
-
-		FindClose(hSearchFile);
-	}
-				
-	// -> Move the most recent file
-	if (ulNbOfEvtFileMoved == m_ulSuccessiveMove)
-	{
-		lstrcpy(tstrTempString, m_tstrEvtPathLocal);
-		lstrcat(tstrTempString, _T("\\*.log"));
-		
-		hSearchFile = FindFirstFile(tstrTempString, &wfdFileData);
-
-		// In the local event directory, searches log file names sorted by alphabetic order and 
-		// moves the last file which is the more recent
-		if (hSearchFile != INVALID_HANDLE_VALUE)
-		{
-			while (FindNextFile(hSearchFile, &wfdFileData) != FALSE);
-
-			// Checks if the time difference between last file write time and current time is more
-			// than 1min
-			GetSystemTime(&stimeGMTCurTime);
-			if (SystemTimeToFileTime(&stimeGMTCurTime, &ftimeGMTCurTime) == FALSE)
-			{
-				LogTrace("[LOGFILE MOVE] Failed to convert the current system time in file time. Current log file not moved.", 1);
-			}
-			else
-			{
-				ul64GMTCurTime = (((ULONGLONG)(ftimeGMTCurTime.dwHighDateTime)) << 32) + ftimeGMTCurTime.dwLowDateTime;
-				ul64GMTFileWTime = (((ULONGLONG)(wfdFileData.ftLastWriteTime.dwHighDateTime)) << 32) + wfdFileData.ftLastWriteTime.dwLowDateTime;
-					
-				if (CompareFileTime(&(wfdFileData.ftLastWriteTime), &ftimeGMTCurTime) == -1)
-				{	
-					ul64CurTimeFileWTimeDiff = ul64GMTCurTime - ul64GMTFileWTime;
-				}
-				else
-				{	
-					ul64CurTimeFileWTimeDiff = ul64GMTFileWTime - ul64GMTCurTime;
-				}
-
-				if (ul64CurTimeFileWTimeDiff > MINUTE_100NS)		
-				{
-					// Moves it to server	
-					ucRet = MoveLogFiles(m_tstrEvtPathLocal, wfdFileData.cFileName, EVENT);
-
-					if (ucRet == RET_OK)
-					{
-						ulNbOfEvtFileMoved++;
-					}
-					else
-					{
+					} else {
+						printf("Error in sending Event Files to driver\n");
 						pmcsMSCopyStatus->bLogFileMoveError = true;
-						strcpy(pmcsMSCopyStatus->strLogFileServerUsed, "No server");
-						FindClose(hSearchFile);
-						return(ucRet);
+						ucRetValue = RET_ERR_LOG_FILE_MOVE;
 					}
+				} else {
+					printf("Error in sending Measurement Files to driver\n");
+					pmcsMSCopyStatus->bLogFileMoveError = true;
+					ucRetValue = RET_ERR_LOG_FILE_MOVE;
 				}
+			} else {
+				//Error in sending 'LogFile' message to the driver
+				//Close the connection.
+				printf("Error in sending 'LogFile' message to peer to start sending log files");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				pmcsMSCopyStatus->bLogFileMoveError = true;
+				ucRetValue = RET_ERR_LOG_FILE_MOVE;
 			}
-
-			FindClose(hSearchFile);
+		} else {
+			//Error in handshake.
+			//Close the connection.
+			printf("Error in application level socket handshake with the peer\n");
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
+			pmcsMSCopyStatus->bLogFileMoveError = true;
+			ucRetValue = RET_ERR_LOG_FILE_MOVE;
 		}
 	}
 
-	// Update of the MSCopy status
-	if ((ulNbOfMeasFileMoved == m_ulSuccessiveMove + 1) || (ulNbOfEvtFileMoved == m_ulSuccessiveMove + 1)) 
-	{
-		pmcsMSCopyStatus->bLogFileMoveRecovery = true;
-	}
-	else
-	{
-		// Displays a trace if no file to move
-		if ((ulNbOfMeasFileMoved == 0) && (ulNbOfEvtFileMoved == 0)) 
-		{
-			LogTrace("[LOGFILE MOVE] No file to move", 2);
-		}
+	if(pmcsMSCopyStatus->bLogFileMoveError) {
+		// Next treatement start time in 1 minute
+		ucRet = GetNextStartTime(1, &m_ul64NextStartTime);
+	} else {
+		// Calculate the next treatement start time
+		ucRet = GetNextStartTime(m_ulMovePeriod, &m_ul64NextStartTime);
 	}
 
-	pmcsMSCopyStatus->bLogFileMoveError = false;
-	
-	if (m_ucCurServer == SERVER1)
-	{
-		strcpy(pmcsMSCopyStatus->strLogFileServerUsed, m_strNameServer1);
-	}
-	else
-	{
-		strcpy(pmcsMSCopyStatus->strLogFileServerUsed, m_strNameServer2);
-	}
-
-	// Calculate the next treatement start time
-	ucRet = GetNextStartTime(m_ulMovePeriod, &m_ul64NextStartTime);
-	
-	if (ucRet != RET_OK)
-	{
+	if (ucRet != RET_OK) {
 		// Start time calculation failed
 		// Reset the next start time to restart the treatment in 1 minute
 		m_ul64NextStartTime = 0;
@@ -468,268 +638,6 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 				"[LOGFILE MOVE] Failed to compute the next start time (local error code = %d). Retry in 1 minute.",
 				ucRet);
 		LogTrace(strTempString, 1);
-	}
-
-	return(RET_OK);
-}
-
-/*********************************************************************/
-/* Function: MoveLogFiles                                            */
-/*                                                                   */
-/* Parameters:                                                       */
-/*		TCHAR* tstrLocalDirPath [in]:								 */
-/*			Source directory path of the file to move				 */
-/*																	 */
-/*		TCHAR* tstrFileName [in]:									 */
-/*			File name to move										 */
-/*																	 */
-/*		unsigned char ucFileType[in]:								 */
-/*			Type of file											 */
-/*          0 = Measure												 */
-/*			1 = Event                                                */
-/*																	 */
-/* Return value:                                                     */
-/*      unsigned char:                                               */
-/*			0 if success, >0 if error						         */
-/*                                                                   */
-/* Remarks:                                                          */
-/*		Moves a log file from its local directory to the current     */
-/*		main server and attempts to the other server in case of      */
-/*		failure. If the new main server is the number 2, calculates  */
-/*		the date when it will be necessary to switch to server 1. If */
-/*		the move failed to each server, suspends the treatment and   */
-/*		calculates the date for the next attempt.				     */
-/*********************************************************************/
-
-unsigned char CLogFileMove::MoveLogFiles(TCHAR* tstrLocalDirPath, TCHAR* tstrFileName, unsigned char ucFileType)
-{
-	unsigned char i, j;
-	unsigned char ucRet;
-	char strTempString[200];
-	char strLocalFilePath[100];
-	
-	TCHAR tstrLocalFilePath[100];
-	TCHAR tstrServerFilePath[100];
-	TCHAR* tcServerDirPath[2][2];
-
-	tcServerDirPath[SERVER1][MEASURE] = m_tstrMeasPathServer1;
-	tcServerDirPath[SERVER2][MEASURE] = m_tstrMeasPathServer2;
-	tcServerDirPath[SERVER1][EVENT] = m_tstrEvtPathServer1;
-	tcServerDirPath[SERVER2][EVENT] = m_tstrEvtPathServer2;
-	
-	// Checks if the log file path length is valid (99 char max)
-	if ((lstrlen(tstrLocalDirPath) + lstrlen(tstrFileName)) >= 99)
-	{
-		m_ul64NextStartTime = 0;
-		
-		for (i = 0; i < lstrlen(tstrLocalDirPath); i++)
-		{
-			strLocalFilePath[i] = (char)tstrLocalDirPath[i];
-		}
-		strLocalFilePath[i] = '\\';
-		
-		for (j = i + 1; j < 99; j++)
-		{
-			strLocalFilePath[j] = (char)tstrFileName[j - i - 1];
-		}
-		strLocalFilePath[99] = '\0';
-		
-		sprintf(strTempString,
-		"[LOGFILE MOVE] Failed to move the log file '%s' (truncated value). Local file path too long (99 char max). Retry in 1 minute.",
-		strLocalFilePath);
-		LogTrace(strTempString, 1);
-		return(RET_ERR_LOG_FILE_PATH);
-	}
-	
-	lstrcpy(tstrLocalFilePath, tstrLocalDirPath);
-	lstrcat(tstrLocalFilePath, _T("\\"));
-	lstrcat(tstrLocalFilePath, tstrFileName);
-	
-	for (i = 0; i <= lstrlen(tstrLocalFilePath); i++)
-	{
-		strLocalFilePath[i] = (char)tstrLocalFilePath[i];
-	}
-	
-	switch(m_ucCurServer) 
-	{	
-		case SERVER1:
-		{
-			// The main server is the number 1
-			lstrcpy(tstrServerFilePath, tcServerDirPath[SERVER1][ucFileType]);
-			lstrcat(tstrServerFilePath, _T("\\"));
-			lstrcat(tstrServerFilePath, tstrFileName);
-			
-			// 1st attempt to server 1
-			if (CopyFile(tstrLocalFilePath, tstrServerFilePath, FALSE) != FALSE) 
-			{
-				if (DeleteFile(tstrLocalFilePath) == FALSE)
-				{
-					m_ul64NextStartTime = 0;
-					
-					sprintf(strTempString,
-					"[LOGFILE MOVE] Failed to delete the log file '%s'. Retry in 1 minute.",
-					strLocalFilePath);
-					LogTrace(strTempString, 1);
-					return(RET_ERR_LOG_FILE_DEL);
-				}
-
-				// File move successful
-				sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 1 OK", strLocalFilePath);
-				LogTrace(strTempString, 2);				
-			}
-			else
-			{
-				// File move failed
-				sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 1 NOK. Attempt with server 2.", strLocalFilePath);
-				LogTrace(strTempString, 2);				
-
-				lstrcpy(tstrServerFilePath, tcServerDirPath[SERVER2][ucFileType]);
-				lstrcat(tstrServerFilePath, _T("\\"));
-				lstrcat(tstrServerFilePath, tstrFileName);
-		
-				// 2nd attempt to server 2
-				if (CopyFile(tstrLocalFilePath, tstrServerFilePath, FALSE) != FALSE) 
-				{
-					if (DeleteFile(tstrLocalFilePath) == FALSE)
-					{
-						m_ul64NextStartTime = 0;
-					
-						sprintf(strTempString,
-						"[LOGFILE MOVE] Failed to delete the log file '%s'. Retry in 1 minute.",
-						strLocalFilePath);
-						LogTrace(strTempString, 1);
-						return(RET_ERR_LOG_FILE_DEL);
-					}
-
-					// File move successful, the new main server is the number 2
-					m_ucCurServer = SERVER2;
-					
-					// Calculate the date when it will be necessary to switch to server 1
-					ucRet = GetNextStartTime(m_ulSrvScrutingDelay, &m_ul64NextSwitchToServer1);
-					if (ucRet != RET_OK)
-					{
-						m_ul64NextSwitchToServer1 = 0;
-		
-						sprintf(strTempString,
-						"[LOGFILE MOVE] Failed to compute the next time to switch to server 1 (local error code = %d). Switch to server 1 at the next treatment.",
-						ucRet);
-						LogTrace(strTempString, 1);
-					}
-
-					sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 2 OK", strLocalFilePath);
-					LogTrace(strTempString, 2);
-				}
-				else
-				{
-					// File move failed, treatment suspended for the configured delay
-					// Calculates the date for the next attempt
-					ucRet = GetNextStartTime(m_ulSrvScrutingDelay, &m_ul64NextStartTime);
-					if (ucRet != RET_OK)
-					{
-						m_ul64NextStartTime = 0;
-		
-						sprintf(strTempString,
-						"[LOGFILE MOVE] Failed to compute the next start time (local error code = %d). Retry in 1 minute.",
-						ucRet);
-						LogTrace(strTempString, 1);
-					}
-
-					sprintf(strTempString,
-					"[LOGFILE MOVE] Failed to move the log file '%s' to servers. Treatment suspended for %d minutes.",
-					strLocalFilePath,
-					m_ulSrvScrutingDelay);
-					LogTrace(strTempString, 1);
-					
-					return(RET_ERR_LOG_FILE_MOVE);
-				}
-			}
-		} 
-		break;
-
-		case SERVER2:
-		{
-			// The main server is the number 2
-			lstrcpy(tstrServerFilePath, tcServerDirPath[SERVER2][ucFileType]);
-			lstrcat(tstrServerFilePath, _T("\\"));
-			lstrcat(tstrServerFilePath, tstrFileName);
-			
-			// 1st attempt to server 2
-			if (CopyFile(tstrLocalFilePath, tstrServerFilePath, FALSE) != FALSE) 
-			{
-				if (DeleteFile(tstrLocalFilePath) == FALSE)
-				{
-					m_ul64NextStartTime = 0;
-					
-					sprintf(strTempString,
-					"[LOGFILE MOVE] Failed to delete the log file '%s'. Retry in 1 minute.",
-					strLocalFilePath);
-					LogTrace(strTempString, 1);
-					return(RET_ERR_LOG_FILE_DEL);
-				}
-
-				// File move successful
-				sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 2 OK", strLocalFilePath);
-				LogTrace(strTempString, 2);				
-			}
-			else
-			{
-				// File move failed
-				sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 2 NOK. Attempt with server 1.", strLocalFilePath);
-				LogTrace(strTempString, 2);
-				
-				lstrcpy(tstrServerFilePath, tcServerDirPath[SERVER1][ucFileType]);
-				lstrcat(tstrServerFilePath, _T("\\"));
-				lstrcat(tstrServerFilePath, tstrFileName);
-		
-				// 2nd attempt to server 1
-				if (CopyFile(tstrLocalFilePath, tstrServerFilePath, FALSE) != FALSE) 
-				{
-					if (DeleteFile(tstrLocalFilePath) == FALSE)
-					{
-						m_ul64NextStartTime = 0;
-					
-						sprintf(strTempString,
-						"[LOGFILE MOVE] Failed to delete the log file '%s'. Retry in 1 minute.",
-						strLocalFilePath);
-						LogTrace(strTempString, 1);
-						return(RET_ERR_LOG_FILE_DEL);
-					}
-
-					// File move successful, the new main server is the number 1
-					m_ucCurServer = SERVER1;
-					m_ul64NextSwitchToServer1 = 0;
-
-					sprintf(strTempString, "[LOGFILE MOVE] Move file '%s' to server 1 OK", strLocalFilePath);
-					LogTrace(strTempString, 2);
-				}
-				else
-				{
-					// File move failed, treatment suspended for the configured delay
-					// Calculates the date for the next attempt
-					ucRet = GetNextStartTime(m_ulSrvScrutingDelay, &m_ul64NextStartTime);
-					if (ucRet != RET_OK)
-					{
-						m_ul64NextStartTime = 0;
-		
-						sprintf(strTempString,
-						"[LOGFILE MOVE] Failed to compute the next start time (local error code = %d). Retry in 1 minute.",
-						ucRet);
-						LogTrace(strTempString, 1);
-					}
-
-					m_ucCurServer = SERVER1;
-					
-					sprintf(strTempString,
-					"[LOGFILE MOVE] Failed to move the log file '%s' to servers. Treatment suspended for %d minutes.",
-					strLocalFilePath,
-					m_ulSrvScrutingDelay);
-					LogTrace(strTempString, 1);
-					
-					return(RET_ERR_LOG_FILE_MOVE);
-				}
-			}
-		} 
-		break;
 	}
 
 	return(RET_OK);
