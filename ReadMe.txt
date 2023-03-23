@@ -2,7 +2,7 @@
        Windows CE APPLICATION : MSCopyThumb
 ========================================================================
 
-
+This corresponds to TP277
 AppWizard has created this MSCopyThumb application for you.  
 
 This file contains a summary of what you will find in each of the files that
