@@ -23,4 +23,5 @@ class CLogFileMove
 
 		unsigned int CLogFileMove::SendMeasFiles(tstMSCopyStatus* pmcsMSCopyStatus);
 		unsigned int CLogFileMove::SendEventFiles(tstMSCopyStatus* pmcsMSCopyStatus);
+		int CLogFileMove::ReceiveACKfromClient();
 };

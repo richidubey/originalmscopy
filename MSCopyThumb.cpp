@@ -273,8 +273,8 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	int wsaret = WSAStartup(0x101, &wsaData);
 
 	if(wsaret!=0) {
-		printf("Error in call to WSAStartup, error code: %d.\nExiting in 3 seconds\n", wsaret);
-		Sleep(3000);
+		//printf("Error in call to WSAStartup, error code: %d.\nExiting in 3 seconds\n", wsaret);
+		//Sleep(3000);
 		return -1;
 	}
 
@@ -287,16 +287,16 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	listening_socket = socket(AF_INET, SOCK_STREAM, 0);
 
 	if( listening_socket == INVALID_SOCKET ) {
-		printf("Error in creating listening socket. Exiting in 2 seconds\n");
-		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
-		Sleep(2000);
+		//printf("Error in creating listening socket. Exiting in 2 seconds\n");
+		//printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		//Sleep(2000);
         return -2;
 	}
 
 	if( bind(listening_socket, (sockaddr*)&local_address, sizeof(local_address)) !=0 ) {
-		printf("\nError in binding the socket to the port 20248.\n");
-		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
-		Sleep(2000);
+		//printf("\nError in binding the socket to the port 20248.\n");
+		//printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		//Sleep(2000);
         return -3;
 	}
 
@@ -305,9 +305,9 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	int iResult = ioctlsocket(listening_socket, FIONBIO, &iMode); //Third parameter != 0 means non blocking
 
 	if(iResult != NO_ERROR) {
-		printf("Error in setting listening socket as non blocking\n");
-		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
-		Sleep(2000);
+		//printf("Error in setting listening socket as non blocking\n");
+		//printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		//Sleep(2000);
         return -4;
 	}
 
@@ -315,9 +315,9 @@ int WINAPI WinMain(	HINSTANCE hInstance,
     //connections from clients. The second arg is the backlog
     if(listen(listening_socket, 10)!=0)
     {
-		printf("Error in using the socket for listening. Exiting in 2 seconds\n");
-		printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
-		Sleep(2000);
+		//printf("Error in using the socket for listening. Exiting in 2 seconds\n");
+		//printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+		//Sleep(2000);
         return -5;
     }
 
@@ -353,7 +353,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	tv.tv_sec = 5;
 	tv.tv_usec = 0;
 
-	printf("Waiting upto 5 seconds to receive a connection in the listening queue\n");
+	//printf("Waiting upto 5 seconds to receive a connection in the listening queue\n");
 
 	iResult = select(listening_socket + 1, &rfds, &wfds, NULL, &tv);
 	
@@ -368,20 +368,20 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		client_socket = accept(listening_socket, (struct sockaddr*) &client_addr, &client_addr_len);
 
 		if(client_socket == INVALID_SOCKET) {
-			printf("Error in accepting the client connection\n");
+			//printf("Error in accepting the client connection\n");
 		} else {
-			printf("Connected successfully to a client\n");
+			//printf("Connected successfully to a client\n");
 
 			int iResult = ioctlsocket(client_socket, FIONBIO, &iMode); //Third parameter != 0 means non blocking
 
 			if(iResult != NO_ERROR) {
-				printf("Error in setting client socket as non blocking\n");
-				printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
-				Sleep(2000);
+				//printf("Error in setting client socket as non blocking\n");
+				//printf("Error code is %d\nExiting in 2 seconds\n", GetLastError());
+				//Sleep(2000);
 				return -4;
 			}
 
-			printf("Succesfully set client socket as non blocking\n");
+			//printf("Succesfully set client socket as non blocking\n");
 		}
 	}
 	
@@ -393,7 +393,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		sprintf(strTempString, "[MAIN] Wait for the next passage at 15s. Sleep delay = %d ms.", dwSleepDelay + 1000);
 		LogTrace(strTempString, 2);
 
-		printf("[MAIN] Wait for the next passage at 15s. Sleep delay = %d ms.\n", dwSleepDelay + 1000);
+		//printf("[MAIN] Wait for the next passage at 15s. Sleep delay = %d ms.\n", dwSleepDelay + 1000);
 
 		// Sleeps during the calculated time + 1s to take in account the lack
 		// of precision of the Windows CE timers
@@ -406,7 +406,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		// passage at 15s one time.
 		GetSystemTime(&stimeGMTDateTime);
 
-		printf("Woke up at stime second: %d\n",stimeGMTDateTime.wSecond);
+		//printf("Woke up at stime second: %d\n",stimeGMTDateTime.wSecond);
 			//TODO - UNCOMMENT THE FOLLOWING LINES ************************9
 		
 		if (!((stimeGMTDateTime.wSecond >= 15) && (stimeGMTDateTime.wSecond <= 30)))
@@ -417,7 +417,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 			
 			// Calculates and applies the next sleep time
 			LogTrace("[MAIN] The wakeup time is not between 15s and 30s. Waits for the next passage at 15s", 1);
-			printf("[MAIN] The wakeup time is not between 15s and 30s. Waits for the next passage at 15s\n");
+			//printf("[MAIN] The wakeup time is not between 15s and 30s. Waits for the next passage at 15s\n");
 			ucRetValue = GetSleepDelayFromCurTime(0, &dwSleepDelay);
 			
 			if (ucRetValue == RET_OK)
@@ -719,13 +719,13 @@ int Socket_Handshake() {
 		//Error in sending to the driver
 		//Close the connection.
 
-		printf("Error in sending random number for handshake\n");
+		//printf("Error in sending random number for handshake\n");
 		closesocket(client_socket);
 		client_socket = INVALID_SOCKET;
 		return -1;
 	}
 
-	printf("Sent random number %d\n", rand_sent);
+	//printf("Sent random number %d\n", rand_sent);
 
 	//Wait upto 5 seconds to receive random_number + 1;
 	iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
@@ -733,7 +733,7 @@ int Socket_Handshake() {
 	if(iRetSelect <= 0) {
 		//Did not receive a reply from the driver
 		//Close the connection.
-		printf("Did not receive rand+1 within 5 seconds or error in select\n");
+		//printf("Did not receive rand+1 within 5 seconds or error in select\n");
 		closesocket(client_socket);
 		client_socket = INVALID_SOCKET;
 		return -1;
@@ -745,24 +745,24 @@ int Socket_Handshake() {
 	if(iRetRecv <= 0) {
 		//Did not receive a reply from the driver
 		//Close the connection.
-		printf("recv: Error in receiving random number + 1 \n");
+		//printf("recv: Error in receiving random number + 1 \n");
 		closesocket(client_socket);
 		client_socket = INVALID_SOCKET;
 		return -1;
 	}
 	
-	printf("Succesfully received %s\n", temp);
+	//printf("Succesfully received %s\n", temp);
 
 	if(atoi(temp) != rand_sent + 1) {
 		//Received an invalid response. 
 		//Close the connection.
-		printf("recv: Received number is not equal to random number + 1 \n");
+		//printf("recv: Received number is not equal to random number + 1 \n");
 		closesocket(client_socket);
 		client_socket = INVALID_SOCKET;
 		return -1;
 	}
 
-	printf("Success: Handshake completed\n");
+	//printf("Success: Handshake completed\n");
 
 	//Handshake completed successfully
 	return 0;

@@ -27,7 +27,7 @@ CLogFileMove::~CLogFileMove()
 {
 }
 
-int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, unsigned long MaxNbOfFilToeMove){
+int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, unsigned long MaxNbOfFileToMove){
 	
 	int sCount;
 	unsigned long ulNbOfFileMoved;
@@ -39,7 +39,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 	FILE *fp;
 
 	char temp[1024];
-	char subtemp[10];
+	char subtemp[15];
 
 	TCHAR tstrTempString[100];
 	char strTempString[100];
@@ -69,7 +69,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		*/
 		//////////////////
 
-		printf("(Telnet)Random Check: Before sending Final Marker, checking if I can receive something from socket already\n");
+	/*	printf("(Telnet)Random Check: Before sending Final Marker, checking if I can receive something from socket already\n");
 			
 		//Wait upto 5 seconds to receive confirmation
 		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
@@ -81,15 +81,15 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 
 		} else {
 			printf("(Telnet) Yes, we can receive\n");
-			recv(client_socket, temp, 10, 0);
+			recv(client_socket, temp, 15, 0);
 
-			printf("(Telnet) Received: %s\nMandatory 3 seconds sleep\n", temp);
-			Sleep(3000);
+			//printf("(Telnet) Received: %s\nMandatory 3 seconds sleep\n", temp);
+			//Sleep(3000);
 		}
-
+*/
 		//////////////////////////
 
-		printf("Sending name: %S\n", fileToSend[sCount]);
+		//printf("Sending name: %S\n", fileToSend[sCount]);
 
 		sprintf(temp, "%S", fileToSend[sCount]);
 
@@ -98,12 +98,12 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 
 		if(iRetSend <= 0) {
 			//Error in sending filename. Abort this Log File Movement treatment.
-			printf("Error in sending filename.\n");
+			//printf("Error in sending filename. Error code is %d\n", GetLastError());
 			return -1; 
 		}
 
-		printf("Going to wait for confirmation  Mandatory 5 second wait\n");
-		Sleep(5);
+//		printf("Going to wait for confirmation  Mandatory 5 second wait\n");
+//		Sleep(5);
 
 		//Wait upto 5 seconds to receive confirmation
 		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
@@ -111,40 +111,40 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if(iRetSelect <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
-			printf("Did not receive any message within 5 seconds or error in select\n");
+			//printf("Did not receive any message within 5 seconds or error in select\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 
 		memset(temp, 0, sizeof(temp));
-		iRetRecv = recv(client_socket, temp, 10, 0);
+		iRetRecv = recv(client_socket, temp, 15, 0);
 
 		if(iRetRecv <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
-			printf("recv: Error in receiving confirmation\n");
+			//printf("recv: Error in receiving confirmation\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 		
-		printf("Succesfully received %s\n", temp);
+		//printf("Succesfully received %s\n", temp);
 		
-		if(strlen(temp) < 9) {
+		if(strlen(temp) < 13) {
 			//Message size less than expected. Received an invalid confirmation.
-			printf("Invalid confirmation message from client. Abort connection\n");
+			//printf("Invalid confirmation message from client. Abort connection\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 
-		memcpy(subtemp, &temp[strlen(temp) - 9], 7); 
-		subtemp[7] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+		memcpy(subtemp, &temp[strlen(temp) - 13], 11); 
+		subtemp[11] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
 
-		if( strcmp("##HSE##", subtemp) != 0 ) {
+		if( strcmp("##DRV_ACK##", subtemp) != 0 ) {
 			//Received an invalid confirmation. 
-			printf("Invalid confirmation message from client. Abort connection\n");
+			//printf("Invalid confirmation message from client. Abort connection\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -156,39 +156,39 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 
 		sprintf(strTempString, "%S", tstrTempString);
 
-		printf("Trying to open in read mode: \n%s\n", strTempString);
+		//printf("Trying to open in read mode: \n%s\n", strTempString);
 
 		fp = fopen(strTempString, "r");
 
 		if(fp == NULL) {
 			//Opening file to read failed. Skip this file
-			printf("Opening file in read mode failed. Skip this file\nError code is %d\n", GetLastError());
+			//printf("Opening file in read mode failed. Skip this file\nError code is %d\n", GetLastError());
 
 			//Send final marker to indicate EOF.
-			sprintf(temp, "**HSE**");
+			sprintf(temp, "##PNL_ACK##");
 			iRetSend = send(client_socket, temp, strlen(temp), 0);
 
 			if(iRetSend <= 0) {
 				//Error in sending final marker. Abort this Log File Movement treatment.
-				printf("Error in sending final marker.\n");
+				//printf("Error in sending final marker.\n");
 				closesocket(client_socket);
 				client_socket = INVALID_SOCKET;
 				return -1; 
 			}
 
-			printf("Mandatory 4 seconds sleep\n");
-			Sleep(4000);
+			//printf("Mandatory 4 seconds sleep\n");
+			//Sleep(4000);
 			continue;
 		}
 
 		while(fgets(temp, sizeof(temp), fp)) {
-			printf("Line read:\n %s",temp);
+			//printf("Line read:\n %s",temp);
 
 			iRetSend = send(client_socket, temp, strlen(temp), 0);
 			
 			if(iRetSend <= 0) {
 				//Error in sending file content. Abort this Log File Movement treatment.
-				printf("Error in sending file content.\n");
+				//printf("Error in sending file content.\n");
 				return -1; 
 			}
 		}
@@ -196,39 +196,39 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 
 		//////////////////
 
-		printf("Before sending Final Marker, checking if I can receive something from socket already\n");
+		//printf("Before sending Final Marker, checking if I can receive something from socket already\n");
 			
 		//Wait upto 5 seconds to receive confirmation
-		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+	//	iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
 		
-		if(iRetSelect <= 0) {
+	//	if(iRetSelect <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
-			printf("Did not receive any message within 5 seconds or error in select\n");
-		} else {
-			printf("Yes, we can receive\n");
-			recv(client_socket, temp, 10, 0);
+	//		printf("Did not receive any message within 5 seconds or error in select\n");
+	//	} else {
+	//		printf("Yes, we can receive\n");
+	//		recv(client_socket, temp, 10, 0);
 
-			printf("Received: %s\nMandatory 3 seconds sleep\n", temp);
-			Sleep(3000);
-		}
+		//	printf("Received: %s\nMandatory 3 seconds sleep\n", temp);
+		//	Sleep(3000);
+	//	}
 
 		//////////////////////////
 
-		sprintf(temp, "**HSE**");
+		sprintf(temp, "##PNL_ACK##");
 		iRetSend = send(client_socket, temp, strlen(temp), 0);
 
 		if(iRetSend <= 0) {
 			//Error in sending final marker. Abort this Log File Movement treatment.
-			printf("Error in sending final marker.\n");
+			//printf("Error in sending final marker.\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1; 
 		}
 
 		
-		printf("(Debug) Going to wait for confirmation mandatory 5 second wait\n");
-		Sleep(5);
+	//	printf("(Debug) Going to wait for confirmation mandatory 5 second wait\n");
+	//Sleep(5);
 
 		//Wait upto 5 seconds to receive confirmation from the driver
 		iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
@@ -236,40 +236,40 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if(iRetSelect <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
-			printf("Did not receive any message within 5 seconds or error in select\n");
+			//printf("Did not receive any message within 5 seconds or error in select\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 
 		memset(temp, 0, sizeof(temp));
-		iRetRecv = recv(client_socket, temp, 10, 0);
+		iRetRecv = recv(client_socket, temp, 15, 0);
 
 		if(iRetRecv <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
-			printf("recv: Error in receiving confirmation\n");
+			//printf("recv: Error in receiving confirmation\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 		
-		printf("Succesfully received %s\n", temp);
+		//printf("Succesfully received %s\n", temp);
 		
-		if(strlen(temp) < 9) {
+		if(strlen(temp) < 13) {
 			//Message size less than expected. Received an invalid confirmation.
-			printf("Invalid confirmation message from client. Abort connection\n");
+			//printf("Invalid confirmation message from client. Abort connection\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
 		}
 
-		memcpy(subtemp, &temp[strlen(temp) - 9], 7); 
-		subtemp[7] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+		memcpy(subtemp, &temp[strlen(temp) - 13], 11); 
+		subtemp[11] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
 
-		if( strcmp("##HSE##", subtemp) != 0 ) {
+		if( strcmp("##DRV_ACK##", subtemp) != 0 ) {
 			//Received an invalid confirmation. 
-			printf("Invalid confirmation message from client. Abort connection\n");
+			//printf("Invalid confirmation message from client. Abort connection\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -281,7 +281,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 
 		if(DeleteFile(tstrTempString) == 0) {
 			//Error in deleting file
-			printf("Error in deleting file. Error code: %d\n", GetLastError());
+			//printf("Error in deleting file. Error code: %d\n", GetLastError());
 		}
 
 		ulNbOfFileMoved = ulNbOfFileMoved + 1;
@@ -331,10 +331,10 @@ unsigned int CLogFileMove::SendMeasFiles(tstMSCopyStatus* pmcsMSCopyStatus) {
 		lstrcpy(tstrTempString, tstrDirPath);
 		lstrcat(tstrTempString, _T("\\*.log"));
 
-		printf("Checking files in folder num %d and full path is \n%S\n",i, tstrTempString);
-
-		printf("Mandatory 2 second sleep\n");
-		Sleep(2000);
+		//printf("Checking files in folder num %d and full path is \n%S\n",i, tstrTempString);
+	
+	//	printf("Mandatory 2 second sleep\n");
+//		Sleep(2000);
 		
 		// In the current directory, searches log file names sorted by alphabetic order to browse 
 		// it from the oldest to the more recent file
@@ -360,16 +360,16 @@ unsigned int CLogFileMove::SendMeasFiles(tstMSCopyStatus* pmcsMSCopyStatus) {
 
 						if (ul64CurTimeFileWTimeDiff > 5 * SECOND_100NS) {
 							
-							printf("File modification time correct, increasing file count\n");
+							//printf("File modification time correct, increasing file count\n");
 							lstrcpy(fileToSend[fCount], ffd.cFileName);
 							fCount++;
 
 						} else {
-							printf("***Modified time of this file in last 5 seconds skipping this file\n");
-							printf("Name of the file was: %S\n",ffd.cFileName);
+							//printf("***Modified time of this file in last 5 seconds skipping this file\n");
+							//printf("Name of the file was: %S\n",ffd.cFileName);
 						}
 					} else {
-						printf("Could not convert SystemTime to FileTime, Send current file\n");
+						//printf("Could not convert SystemTime to FileTime, Send current file\n");
 						lstrcpy(fileToSend[fCount], ffd.cFileName);
 						fCount++;
 						}
@@ -380,13 +380,13 @@ unsigned int CLogFileMove::SendMeasFiles(tstMSCopyStatus* pmcsMSCopyStatus) {
 			} while ( FindNextFile(hSearchFile, &ffd) == TRUE);
 		} else {
 			//No file in this folder
-				printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
-				Sleep(2000);
+		//		printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
+		//		Sleep(2000);
 		
-			printf("There are no files in folder %d or error code is %d\n", i, GetLastError());
+				//printf("There are no files in folder %d or error code is %d\n", i, GetLastError());
 		}
 
-		printf("Sending %d files from this folder\n", fCount);
+		//printf("Sending %d files from this folder\n", fCount);
 
 		ulNbOfFileMoved = SendFilesOverSocket(fCount, fileToSend, tstrDirPath, m_ulSuccessiveMove - ulTotNbOfFileMoved);
 		
@@ -427,8 +427,8 @@ unsigned int CLogFileMove::SendEventFiles(tstMSCopyStatus* pmcsMSCopyStatus)
 	lstrcpy(tstrTempString, m_tstrEvtPathLocal);
 	lstrcat(tstrTempString, _T("\\*.log"));
 
-	printf("Checking files in folder\n%S\nMandatory 2 second sleep\n", tstrTempString);
-	Sleep(2000);
+	//printf("Checking files in folder\n%S\nMandatory 2 second sleep\n", tstrTempString);
+	//Sleep(2000);
 		
 	// In the current directory, searches log file names sorted by alphabetic order to browse 
 	// it from the oldest to the more recent file
@@ -451,27 +451,27 @@ unsigned int CLogFileMove::SendEventFiles(tstMSCopyStatus* pmcsMSCopyStatus)
 				}
 
 				if (ul64CurTimeFileWTimeDiff > 60 * SECOND_100NS) {
-					printf("File modification time correct, increasing file count\n");
+					//printf("File modification time correct, increasing file count\n");
 					lstrcpy(fileToSend[fCount], ffd.cFileName);
 					fCount++;
 				} else {
-					printf("***Modified time of this file in last 60 seconds skipping this file\n");
-					printf("Name of the file was: %S\n",ffd.cFileName);
+					//printf("***Modified time of this file in last 60 seconds skipping this file\n");
+					//printf("Name of the file was: %S\n",ffd.cFileName);
 				}
 			} else {
-				printf("Could not convert SystemTime to FileTime, Send current file\n");
+				//printf("Could not convert SystemTime to FileTime, Send current file\n");
 				lstrcpy(fileToSend[fCount], ffd.cFileName);
 				fCount++;
 				}
 		} while ( FindNextFile(hSearchFile, &ffd) == TRUE);
 	} else {
 		//No file in this folder
-		printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
-		Sleep(2000);
-		printf("There are no files in the events folder\n");
+		//printf("INVALID HANDLE to get file. Mandatory 2 second sleep\n");
+		//Sleep(2000);
+		//printf("There are no files in the events folder\n");
 	}
 
-	ulNbOfFileMoved = SendFilesOverSocket(fCount, fileToSend, tstrDirPath, m_ulSuccessiveMove);
+	ulNbOfFileMoved = SendFilesOverSocket(fCount, fileToSend, m_tstrEvtPathLocal, m_ulSuccessiveMove);
 		
 	if( ulNbOfFileMoved < 0 ) {
 		return -1;
@@ -484,6 +484,55 @@ unsigned int CLogFileMove::SendEventFiles(tstMSCopyStatus* pmcsMSCopyStatus)
 	return 0;
 }
 
+int CLogFileMove::ReceiveACKfromClient()
+{
+	char temp[1024], subtemp[15];
+	int iRetSelect;
+	int iRetRecv;
+
+	//printf("Waiting upto 5 seconds to receive ACK\n");
+
+	iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+	if(iRetSelect <= 0) {
+		//Did not receive a reply from the driver
+		//Close the connection.
+		//printf("Did not receive any message within 5 seconds or error in select\n");
+		return -1;
+	}
+
+	memset(temp, 0, sizeof(temp));
+	iRetRecv = recv(client_socket, temp, 15, 0);
+
+	if(iRetRecv <= 0) {
+		//Did not receive a reply from the driver
+		//Close the connection.
+		//printf("recv: Error in receiving confirmation\n");
+		return -1;
+	}
+	
+	//printf("Succesfully received %s\n", temp);
+	
+	if(strlen(temp) < 13) {
+		//Message size less than expected. Received an invalid confirmation.
+		//printf("Invalid confirmation message from client. Abort connection\n");
+		return -1;
+	}
+
+	memcpy(subtemp, &temp[strlen(temp) - 13], 11); 
+	subtemp[11] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+
+	if( strcmp("##DRV_ACK##", subtemp) != 0 ) {
+		//Received an invalid confirmation. 
+		//printf("Invalid confirmation message from client. Abort connection\n");
+		return -1;
+	}
+
+
+	//printf("ACK received successfully\n");
+	//ACK received successfully;
+	return 0;
+}
 ///////////////////////////////////////////////////////////////////////
 // CLogFileMove member functions
 
@@ -516,6 +565,7 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 
 	int iRetHandshake;
 	int iRetSend;
+	int iRetAck;
 
 	char temp[1024];
 
@@ -526,7 +576,7 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
     int fromlen = sizeof(from);
 
 
-	printf("Inside Log File Move Treatment\n");
+	//printf("Inside Log File Move Treatment\n");
 
 	// Status and flag initialization
 	pmcsMSCopyStatus->bLogFileMoveError = false;
@@ -535,23 +585,23 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 
 	if(client_socket == INVALID_SOCKET) {
 		//Client is not connected. Wait upto 5 seconds on the listening queue
-		printf("Client is not connected. Wait upto 5 seconds on the listening queue\n");
+		//printf("Client is not connected. Wait upto 5 seconds on the listening queue\n");
 		int iRetSelect = SelectReadUptoNSeconds(listening_socket, 5);
 
 		if(iRetSelect > 0) {
 			client_socket = accept(listening_socket, (struct sockaddr*) &from, &fromlen);
 			
 			if(client_socket > 0) {
-				printf("Succesfully connected to the driver within a 5 seconds wait \n");
+				//printf("Succesfully connected to the driver within a 5 seconds wait \n");
 			} else {
 				//Could not accept connection to driver. Skip User Synchronization treatment.
-				printf("Could not accept connection to driver. Skip Log File Synchronization treatment.\n");
+				//printf("Could not accept connection to driver. Skip Log File Synchronization treatment.\n");
 				skip_treatment = true;
 				pmcsMSCopyStatus->bLogFileMoveError = true;
 			}
 		} else {
 			//Could not connect to driver. Skip User Synchronization treatment.
-			printf("Could not connect to driver in last 5 seconds. Skip Log File Synchronization treatment.");
+			//printf("Could not connect to driver in last 5 seconds. Skip Log File Synchronization treatment.");
 			skip_treatment = true;
 			pmcsMSCopyStatus->bLogFileMoveError = true;
 		}
@@ -566,45 +616,81 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 			sprintf(temp, "LogFile");
 	
 			//Send 'LogFile' message to indicate start of Log File Move Treatment
-			printf("To peer send 'LogFile' message to indicate start of Log File Move Treatment\n");
+			//printf("To peer send 'LogFile' message to indicate start of Log File Move Treatment\n");
 			iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-			printf("Mandatory 2 seconds wait\n");
-			Sleep(2000);
+		//	printf("Mandatory 2 seconds wait\n");
+	//		Sleep(2000);
 
-			if(iRetSend > 0) {
+			if(iRetSend > 0)
+				//Receive ACK for LogFile Message
+				iRetAck = ReceiveACKfromClient();
+
+			
+			if(iRetSend > 0 && iRetAck == 0) {
 				if( SendMeasFiles(pmcsMSCopyStatus) == 0) {
 					//Mesaurement files sent succesfully. Send log files now.
-					printf("Measurement files sent successfully\n");
-					if(SendEventFiles(pmcsMSCopyStatus)==0) {
-						//Both measurement and event files sent successfully. 
+					//printf("Measurement files sent successfully\n");
+					
+					sprintf(temp, "Event");
+					//Send 'Event' message to indicate sending of Event Files 
+					//printf("To peer send 'Event' message to indicate sending of Event Files."); //Mandatory 2 secs wait\n");
+					//Sleep(2000);
+					iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-						sprintf(temp, "**HSE**");
-						iRetSend = send(client_socket, temp, strlen(temp), 0);
+					if(iRetSend > 0)
+						//Receive ACK for Event Message
+						iRetAck = ReceiveACKfromClient();
 
-						if(iRetSend <= 0) {
-							//Error in sending final marker. Abort this Log File Movement treatment.
-							printf("Error in sending final marker.\n");
-							closesocket(client_socket);
-							client_socket = INVALID_SOCKET;
-							pmcsMSCopyStatus->bLogFileMoveError = true;
+					if(iRetSend > 0 && iRetAck == 0) {
+						if(SendEventFiles(pmcsMSCopyStatus)==0) {
+							//Both measurement and event files sent successfully. 
+							//Sleep(2000);
+							sprintf(temp, "##PNL_ACK##");
+							iRetSend = send(client_socket, temp, strlen(temp), 0);
+
+							if(iRetSend <= 0) {
+								//Error in sending final marker. Abort this Log File Movement treatment.
+								//printf("Error in sending final marker.\n");
+								closesocket(client_socket);
+								client_socket = INVALID_SOCKET;
+								pmcsMSCopyStatus->bLogFileMoveError = true;
+							} else {
+								pmcsMSCopyStatus->bLogFileMoveError = false;
+							}
 						} else {
-							pmcsMSCopyStatus->bLogFileMoveError = false;
+							//printf("Error in sending Event Files to driver\n");
+							pmcsMSCopyStatus->bLogFileMoveError = true;
+							ucRetValue = RET_ERR_LOG_FILE_MOVE;
 						}
 					} else {
-						printf("Error in sending Event Files to driver\n");
+						//Error in sending 'Event' message to the driver
+						//Close the connection.
+
+						//if(iRetSend <= 0)
+							//printf("Error in sending 'Event' message to peer to start sending log files");
+				//		else
+							//printf("Error in getting ACK of 'Event' message from peer");
+
+						closesocket(client_socket);
+						client_socket = INVALID_SOCKET;
 						pmcsMSCopyStatus->bLogFileMoveError = true;
 						ucRetValue = RET_ERR_LOG_FILE_MOVE;
 					}
 				} else {
-					printf("Error in sending Measurement Files to driver\n");
+					//printf("Error in sending Measurement Files to driver\n");
 					pmcsMSCopyStatus->bLogFileMoveError = true;
 					ucRetValue = RET_ERR_LOG_FILE_MOVE;
 				}
 			} else {
-				//Error in sending 'LogFile' message to the driver
+				//Error in sending 'LogFile' message to the driver or in Receiving ACK
 				//Close the connection.
-				printf("Error in sending 'LogFile' message to peer to start sending log files");
+				
+				//if(iRetSend <= 0)
+					//printf("Error in sending 'LogFile' message to peer to start sending log files");
+				//else
+					//printf("Error in getting ACK of 'LogFile' message from peer");
+				
 				closesocket(client_socket);
 				client_socket = INVALID_SOCKET;
 				pmcsMSCopyStatus->bLogFileMoveError = true;
@@ -613,7 +699,7 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 		} else {
 			//Error in handshake.
 			//Close the connection.
-			printf("Error in application level socket handshake with the peer\n");
+			//printf("Error in application level socket handshake with the peer\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			pmcsMSCopyStatus->bLogFileMoveError = true;

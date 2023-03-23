@@ -55,12 +55,12 @@ int CUsrSynchro::GetUserFile() {
 	}
 	strcpy(&m_strUsrTempPathLocal[i+1], "UserTemp.dat");
 
-	printf("Location of User file is :\n%s\n", m_strUsrPathLocal);
-	printf("Location of temp User file being created is :\n%s\n", m_strUsrTempPathLocal);
+	//printf("Location of User file is :\n%s\n", m_strUsrPathLocal);
+	//printf("Location of temp User file being created is :\n%s\n", m_strUsrTempPathLocal);
 
 	FILE *nfile = fopen(m_strUsrTempPathLocal ,"w");
 
-	printf("Received UserFileContent: \n\n");
+	//printf("Received UserFileContent: \n\n");
 	char subtemp[8];
 
 	strcpy(subtemp, "Hello");
@@ -83,9 +83,9 @@ int CUsrSynchro::GetUserFile() {
 			temp[1024] = '\0';
 		}
 
-		printf("%s\n",temp);
+		//printf("%s\n",temp);
 
-		if(strlen(temp) >=9) {
+		if(strlen(temp) >=13) {
 			//printf("The last 5 characters of the message is:\n");
 
 			//char r = '\0';
@@ -97,17 +97,17 @@ int CUsrSynchro::GetUserFile() {
 			//printf("Position %d : %c\n", strlen(temp)-4, temp[strlen(temp)-4]);
 			//printf("Position %d : %c\n", strlen(temp)-5, temp[strlen(temp)-5]);
 		
-			printf("Strlen temp is :%d\n", strlen(temp));
-			memcpy(subtemp, &temp[strlen(temp) - 9], 7); //Destination, Source, size
+			//printf("Strlen temp is :%d\n", strlen(temp));
+			memcpy(subtemp, &temp[strlen(temp) - 13], 11); //Destination, Source, size
 			//Account for 2 extra characters at the end.
-			subtemp[7] = '\0';
+			subtemp[11] = '\0';
 
-			printf("\nLast 7 character of temp are:  %s\n",subtemp);
+			//printf("\nLast 11 character of temp are:  %s\n",subtemp);
 		}
 
-		if( strcmp("##HSE##", subtemp) == 0 ) {
-			printf("Received the entire file\n");
-			temp[strlen(temp) - 9] = '\0';
+		if( strcmp("##DRV_ACK##", subtemp) == 0 ) {
+			//printf("Received the entire file\n");
+			temp[strlen(temp) - 13] = '\0';
 			fprintf(nfile, "%s", temp);
 			fclose(nfile);
 			break;
@@ -163,7 +163,7 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
     int fromlen = sizeof(from);
 
 
-	printf("Inside User Synchronization Treatment\n");
+	//printf("Inside User Synchronization Treatment\n");
 
 	if(client_socket == INVALID_SOCKET) {
 		
@@ -171,71 +171,71 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 
 		iRetSelect = SelectReadUptoNSeconds(listening_socket, 5);
 
-		printf("Client is not connected. Will wait upto 5 seconds for possible incoming connections\n");
+		//printf("Client is not connected. Will wait upto 5 seconds for possible incoming connections\n");
 
 		if(iRetSelect > 0) {
 			client_socket = accept(listening_socket, (struct sockaddr*) &from, &fromlen); //Todo - Update the 2nd and 3rd parameter
 
 			if(client_socket > 0) {
-				printf("Succesfully connected to the driver within a 5 seconds wait \n");
+				//printf("Succesfully connected to the driver within a 5 seconds wait \n");
 			} else {
 				//Could not connect to driver. Skip User Synchronization treatment.
-				printf("Error in accepting the client connection\n");
+				//printf("Error in accepting the client connection\n");
 				skip_treatment = true;
 			}
 		} else {
 			//Could not connect to driver. Skip User Synchronization treatment.
-			printf("No client connected in last 5 seconds or error in select\n");
+			//printf("No client connected in last 5 seconds or error in select\n");
 			skip_treatment = true;
 		}
 	}
 
 	if(!skip_treatment) {
 
-		printf("Starting treatment with handshake\n");
+		//printf("Starting treatment with handshake\n");
 
 		iRetHandshake = Socket_Handshake();
 
 		if(iRetHandshake == 0) {
 
-			printf("Handshake completed, Sending 'User' Message\n");
+			//printf("Handshake completed, Sending 'User' Message\n");
 
 			sprintf(temp, "User");
 	
 			//Send 'User' message to indicate start of User File Synchronization Treatment
 			iRetSend = send(client_socket, temp, strlen(temp), 0);
 
-			printf("Mandatory 2 seconds wait\n");
-			Sleep(2000);
+		//	printf("Mandatory 2 seconds wait\n");
+	//		Sleep(2000);
 
 			if(iRetSend > 0) {
 				if( GetUserFile() == 0) {
 					//User Temp file has been generated completely.
 					//Replace actual user file with the UserTemp file
 
-					printf("Successfully received the entire file\n");
+					//printf("Successfully received the entire file\n");
 					wsprintf(m_tstrUsrTempPathLocal, _T("%S"), m_strUsrTempPathLocal);
 					if ( CopyFile(m_tstrUsrTempPathLocal, m_tstrUsrPathLocal,FALSE) ) { //Source, Destination, FailIfExists
 						pmcsMSCopyStatus->bUsrSynchroError = false;
-						printf("Successfully replaced the original user file with the temporary file\n");
-						printf("Mandatory 2 second sleep\n");
-						Sleep(2000);
+						//printf("Successfully replaced the original user file with the temporary file\n");
+						//printf("Mandatory 2 second sleep\n");
+						//Sleep(2000);
 
 					} else {
 						//Error in replacing original user file with the temporary file
-						printf("Error in replacing original user file with the temporary file\nError Code: %d\n\n", GetLastError());
+						//printf("Error in replacing original user file with the temporary file\nError Code: %d\n\n", GetLastError());
 						pmcsMSCopyStatus->bUsrSynchroError = true;
 						ucRetValue = RET_ERR_USR_FILE_COPY;
 					}
 				} else {
-					printf("Error in getting User File from peer\n");
+					//printf("Error in getting User File from peer\n");
 					pmcsMSCopyStatus->bUsrSynchroError = true;
 					ucRetValue = RET_ERR_USR_FILE_COPY;
 				}
 			} else {
 				//Error in sending 'User' message to the driver
 				//Close the connection.
-				printf("Error in sending 'User' message to peer to start User file exchange");
+				//printf("Error in sending 'User' message to peer to start User file exchange");
 				closesocket(client_socket);
 				client_socket = INVALID_SOCKET;
 				pmcsMSCopyStatus->bUsrSynchroError = true;
@@ -244,7 +244,7 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 		} else {
 			//Error in handshake.
 			//Close the connection.
-			printf("Error in application level socket handshake with the peer\n");
+			//printf("Error in application level socket handshake with the peer\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			pmcsMSCopyStatus->bUsrSynchroError = true;
@@ -259,7 +259,7 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 		ucRetValue2 = GetNextStartTime(1, &m_ul64NextStartTime);
 	} else {
 		ucRetValue2 = GetNextStartTime(m_ulTimePeriod, &m_ul64NextStartTime);
-		printf("User Synchronization completed succesfully\n");
+		//printf("User Synchronization completed succesfully\n");
 	}
 		
 	if (ucRetValue2 != RET_OK)
