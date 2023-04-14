@@ -178,6 +178,7 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 
 			if(client_socket > 0) {
 				//printf("Succesfully connected to the driver within a 5 seconds wait \n");
+				ioctlsocket(client_socket, FIONBIO, &iMode); //Set connection as non blocking
 			} else {
 				//Could not connect to driver. Skip User Synchronization treatment.
 				//printf("Error in accepting the client connection\n");

@@ -593,6 +593,7 @@ unsigned char CLogFileMove::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
 			
 			if(client_socket > 0) {
 				//printf("Succesfully connected to the driver within a 5 seconds wait \n");
+				ioctlsocket(listening_socket, FIONBIO, &iMode);
 			} else {
 				//Could not accept connection to driver. Skip User Synchronization treatment.
 				//printf("Could not accept connection to driver. Skip Log File Synchronization treatment.\n");
