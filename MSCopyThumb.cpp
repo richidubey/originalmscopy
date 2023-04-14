@@ -325,7 +325,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	// Initialization of the MSCopy status structure
 	gmcsMSCopyStatus.bLogFileMoveError = false;
 	gmcsMSCopyStatus.bLogFileMoveRecovery = false;
-	gmcsMSCopyStatus.bLogFileMoveRecovery = false;
+	gmcsMSCopyStatus.bUsrSynchroError = false;
 
 	strcpy(gmcsMSCopyStatus.strLogFileServerUsed, "No server");
 	gmcsMSCopyStatus.fMSCopyVersion = MSCOPY_VERSION;
