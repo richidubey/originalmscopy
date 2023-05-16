@@ -9,6 +9,7 @@
 /* - Synchronizes the user account file								 */
 /*																	 */
 /* Author: Laurent MARTIN - ASSYSTEM								 */
+/* Co-Author: Richi Dubey - CERN									 */
 /* Version: 1.00													 */
 /* Date: 26/11/2014													 */
 /* Panel type: MP270B												 */
@@ -330,13 +331,14 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	gmcsMSCopyStatus.fMSCopyVersion = MSCOPY_VERSION;
 
 	// Initialization of the 3 main cylic treatments (object creation)
+
 	// -> User file synchronisation
+	if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 	pcusUsrSynchro = new CUsrSynchro(&gmccMSCopyCfg);
 	// -> Moving of log files to server
 	pclfmLogFileMove = new CLogFileMove(&gmccMSCopyCfg);
 	// -> Writing of the status file
 	pswStatusWrite = new CStatusWrite(&gmccMSCopyCfg);
-
 
 	//Wait upto 5 seconds to establish a connection
 
@@ -364,7 +366,6 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	if(iResult == 1 && FD_ISSET(listening_socket, &rfds) ) {
 
 		//Socket is readable => there is atleast one complete connection in queue
-
 		client_socket = accept(listening_socket, (struct sockaddr*) &client_addr, &client_addr_len);
 
 		if(client_socket == INVALID_SOCKET) {
@@ -451,8 +452,10 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	// First execution of the 3 main cyclic treatments
 	// -> User file synchronisation
 	//TODO: UNCOMMMENT THE FOLLOWING LINE!
+	if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 	pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
 	// -> Moving of log files to server
+	if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 	pclfmLogFileMove->ExecuteTreatment(&gmcsMSCopyStatus);	
 	// -> Writing of the status file
 	pswStatusWrite->ExecuteTreatment(&gmcsMSCopyStatus);
@@ -470,13 +473,14 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 		bTreatmentDatesAreValid = true;
 		
 		ucRetValue = GetSleepDelayFromVarTime(stimeGMTDateTime, pclfmLogFileMove->m_ul64NextStartTime, &dwSleepDelayLFM);
+		if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 		ucRetValue |= GetSleepDelayFromVarTime(stimeGMTDateTime, pcusUsrSynchro->m_ul64NextStartTime, &dwSleepDelayUS);
 		ucRetValue |= GetSleepDelayFromVarTime(stimeGMTDateTime, pswStatusWrite->m_ul64NextStartTime, &dwSleepDelaySW);
 
 		if (ucRetValue == RET_OK) 
 		{
 			if (((dwSleepDelayLFM > (DWORD)((gmccMSCopyCfg.lMovePeriod + 1) * MINUTE_MS)) && (dwSleepDelayLFM > (DWORD)((gmccMSCopyCfg.lSrvScrutingDelay + 1) * MINUTE_MS)))
-				|| (dwSleepDelayUS > (DWORD)((gmccMSCopyCfg.lUsrSynchroPeriod + 1) * MINUTE_MS))
+				|| (gmccMSCopyCfg.lUsrSynchroPeriod != 0 && dwSleepDelayUS > (DWORD)((gmccMSCopyCfg.lUsrSynchroPeriod + 1) * MINUTE_MS))
 				|| (dwSleepDelaySW > (DWORD)((gmccMSCopyCfg.lStatusWritePeriod + 1) * MINUTE_MS)))
 			{
 				bTreatmentDatesAreValid = false;
@@ -485,30 +489,30 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 			if (bTreatmentDatesAreValid == true)
 			{
 				// Looks for the earliest date among the 3 next treatment start dates		
-				if (dwSleepDelayLFM < dwSleepDelayUS)
+				if (dwSleepDelayLFM < dwSleepDelaySW)
 				{
-					if (dwSleepDelayLFM < dwSleepDelaySW)
+					if (gmccMSCopyCfg.lUsrSynchroPeriod == 0 || dwSleepDelayLFM < dwSleepDelayUS)
 					{
 						dwSleepDelay = dwSleepDelayLFM;
 						ul64GMTFirstStartTime = pclfmLogFileMove->m_ul64NextStartTime;
 					}
 					else
 					{
-						dwSleepDelay = dwSleepDelaySW;
-						ul64GMTFirstStartTime = pswStatusWrite->m_ul64NextStartTime;
+						dwSleepDelay = dwSleepDelayUS;
+						ul64GMTFirstStartTime = pcusUsrSynchro->m_ul64NextStartTime;
 					}	
 				}
 				else
 				{
-					if (dwSleepDelayUS < dwSleepDelaySW)
-					{
-						dwSleepDelay = dwSleepDelayUS;
-						ul64GMTFirstStartTime = pcusUsrSynchro->m_ul64NextStartTime;
-					}
-					else
+					if (gmccMSCopyCfg.lUsrSynchroPeriod == 0 || dwSleepDelaySW < dwSleepDelayUS)
 					{
 						dwSleepDelay = dwSleepDelaySW;
 						ul64GMTFirstStartTime = pswStatusWrite->m_ul64NextStartTime;
+					}
+					else
+					{
+						dwSleepDelay = dwSleepDelayUS;
+						ul64GMTFirstStartTime = pcusUsrSynchro->m_ul64NextStartTime;
 					}
 				}
 			}
@@ -611,6 +615,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 			// -> Moving of log files to server
 			pclfmLogFileMove->ExecuteTreatment(&gmcsMSCopyStatus);	
 			// -> User file synchronisation
+			if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 			pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
 			// -> Writing of the status file
 			pswStatusWrite->ExecuteTreatment(&gmcsMSCopyStatus);
@@ -645,7 +650,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 			}
 
 			// 2. User profile synchronisation
-			if (pcusUsrSynchro->m_ul64NextStartTime <= ul64GMTCurTime)
+			if (gmccMSCopyCfg.lUsrSynchroPeriod != 0 && pcusUsrSynchro->m_ul64NextStartTime <= ul64GMTCurTime)
 			{		
 				pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
 			}
