@@ -450,12 +450,11 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	}
 
 	// First execution of the 3 main cyclic treatments
-	// -> User file synchronisation
-	//TODO: UNCOMMMENT THE FOLLOWING LINE!
+	// -> User file synchronisation	
 	if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
-	pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
+		pcusUsrSynchro->ExecuteTreatment(&gmcsMSCopyStatus);
+	
 	// -> Moving of log files to server
-	if(gmccMSCopyCfg.lUsrSynchroPeriod != 0)
 	pclfmLogFileMove->ExecuteTreatment(&gmcsMSCopyStatus);	
 	// -> Writing of the status file
 	pswStatusWrite->ExecuteTreatment(&gmcsMSCopyStatus);

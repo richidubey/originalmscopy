@@ -4,6 +4,7 @@
 
 #include "stdafx.h"
 #include "CUsrSynchro.h"
+#include "CEncryption.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -45,6 +46,7 @@ int CUsrSynchro::GetUserFile() {
 	
 	
 	strcpy(m_strUsrTempPathLocal, m_strUsrPathLocal); //Parameter: Destination, Source
+	strcpy(m_strUsrEncTempPathLocal, m_strUsrPathLocal); //Parameter: Destination, Source
 
 	//Replace User.dat with UserTemp.dat in the temp name. Find the location of last '/' first
 	int i;
@@ -54,11 +56,12 @@ int CUsrSynchro::GetUserFile() {
 		}
 	}
 	strcpy(&m_strUsrTempPathLocal[i+1], "UserTemp.dat");
+	strcpy(&m_strUsrEncTempPathLocal[i+1], "UserEncTemp.dat");
 
 	//printf("Location of User file is :\n%s\n", m_strUsrPathLocal);
 	//printf("Location of temp User file being created is :\n%s\n", m_strUsrTempPathLocal);
 
-	FILE *nfile = fopen(m_strUsrTempPathLocal ,"w");
+	FILE *nfile = fopen(m_strUsrEncTempPathLocal ,"w");
 
 	//printf("Received UserFileContent: \n\n");
 	char subtemp[8];
@@ -74,6 +77,7 @@ int CUsrSynchro::GetUserFile() {
 		if(iRetRecv <= 0) {
 			//Did not receive a reply from the driver
 			//Close the connection.
+			//printf("Did not receive a reply from the driver, closing the connection\n");
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -83,9 +87,10 @@ int CUsrSynchro::GetUserFile() {
 			temp[1024] = '\0';
 		}
 
-		//printf("%s\n",temp);
+	//	printf("%s\n",temp);
 
 		if(strlen(temp) >=13) {
+			//printf("Received a long message: %s\n", temp);
 			//printf("The last 5 characters of the message is:\n");
 
 			//char r = '\0';
@@ -106,7 +111,7 @@ int CUsrSynchro::GetUserFile() {
 		}
 
 		if( strcmp("##DRV_ACK##", subtemp) == 0 ) {
-			//printf("Received the entire file\n");
+		//	printf("Received the entire file\n");
 			temp[strlen(temp) - 13] = '\0';
 			fprintf(nfile, "%s", temp);
 			fclose(nfile);
@@ -115,6 +120,100 @@ int CUsrSynchro::GetUserFile() {
 
 		fprintf(nfile, "%s", temp);
 	}
+
+	fclose(nfile);
+
+	//Received the encrypted data, Unencrypt it and save it to UserTemp.dat
+
+	////////////////Decryption/////////////////////////
+	
+    // Open the file in write mode
+    FILE *file = fopen(m_strUsrTempPathLocal, "w");
+
+    // Check if the file was opened successfully
+    if (file == NULL) {
+        //printf("Failed to open the file.\n");
+        return -1;
+    }
+
+	unsigned char ct[8], key[8]="123";
+	symmetric_key skey;
+	int err;
+
+	char pt[8];
+
+	/* schedule the key */
+	if ((err = des_setup(key, /* the key we will use */
+						8, /* key is 8 bytes (64-bits) long */
+						0, /* 0 == use default # of rounds */
+						&skey) /* where to put the scheduled key */
+						) != CRYPT_OK) {
+		//printf("Setup error: %s\n", error_to_string(err));
+		return -1;
+	}
+
+	int counter = 0;
+	char buffer[20];
+
+    memset(ct, 0, 8);
+    memset(pt, 0, 8);
+
+	nfile = fopen(m_strUsrEncTempPathLocal ,"r");
+
+    //int val;
+    while(fgets(buffer, sizeof(buffer), nfile)) {
+        //cout<<buffer<<endl;
+
+        ct[counter % 8] = atoi(buffer);
+        counter++;
+
+        if(counter % 8 == 0) {
+          //  printf("Decrypting: %s\n", ct);
+
+            des_ecb_decrypt(ct, /* decrypt this 8-byte array */ reinterpret_cast<unsigned char *>(pt), /* store decrypted data here */ &skey); /* our previously scheduled key */
+
+           // printf("Decrypted data is %s\n", pt);
+
+            memset(&pt[8], 0, 1);
+
+			if(pt[0] == '\n')
+				pt[0] = 0;
+
+			if(pt[1] == '\n')
+				pt[1] = 0;
+
+			if(pt[2] == '\n')
+				pt[2] = 0;
+
+			if(pt[3] == '\n')
+				pt[3] = 0;
+
+			if(pt[4] == '\n')
+				pt[4] = 0;
+
+			if(pt[5] == '\n')
+				pt[5] = 0;
+
+			if(pt[6] == '\n')
+				pt[6] = 0;
+
+			if(pt[7] == '\n')
+				pt[7] = 0;
+
+            fprintf(file, "%s", pt);
+            memset(ct, 0, 8);
+            memset(pt, 0, 8);
+        }
+
+    }
+
+	/* Terminate the cipher context */
+	des_done(&skey);
+	//printf("File decryption complete");
+
+	// Close the file
+    fclose(file);
+	fclose(nfile);
 
 	return 0;
 }
@@ -163,7 +262,7 @@ unsigned char CUsrSynchro::ExecuteTreatment(tstMSCopyStatus* pmcsMSCopyStatus)
     int fromlen = sizeof(from);
 
 
-	//printf("Inside User Synchronization Treatment\n");
+//	printf("Inside User Synchronization Treatment\n");
 
 	if(client_socket == INVALID_SOCKET) {
 		
