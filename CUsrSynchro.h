@@ -17,6 +17,7 @@ class CUsrSynchro
 		char m_strUsrPathLocal[100];
 		char m_strUsrPathServer[100];
 		char m_strUsrTempPathLocal[100];
+		char m_strUsrEncTempPathLocal[100];
 		TCHAR m_tstrUsrPathLocal[100];
 		TCHAR m_tstrUsrPathServer[100];
 		TCHAR m_tstrUsrTempPathLocal[100];
