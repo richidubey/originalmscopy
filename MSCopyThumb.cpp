@@ -340,6 +340,10 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	// -> Writing of the status file
 	pswStatusWrite = new CStatusWrite(&gmccMSCopyCfg);
 
+	//Write status file as soon as program starts to make sure MSLog does not 
+	//indicate a MSCopy failure warning.
+	pswStatusWrite->ExecuteTreatment(&gmcsMSCopyStatus);
+
 	//Wait upto 5 seconds to establish a connection
 
 	fd_set rfds, wfds;
