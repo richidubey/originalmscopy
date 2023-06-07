@@ -99,6 +99,8 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if(iRetSend <= 0) {
 			//Error in sending filename. Abort this Log File Movement treatment.
 			//printf("Error in sending filename. Error code is %d\n", GetLastError());
+			closesocket(client_socket);
+			client_socket = INVALID_SOCKET;
 			return -1; 
 		}
 
@@ -189,6 +191,9 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 			if(iRetSend <= 0) {
 				//Error in sending file content. Abort this Log File Movement treatment.
 				//printf("Error in sending file content.\n");
+				fclose(fp);
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
 				return -1; 
 			}
 		}
@@ -221,6 +226,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if(iRetSend <= 0) {
 			//Error in sending final marker. Abort this Log File Movement treatment.
 			//printf("Error in sending final marker.\n");
+			fclose(fp);
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1; 
@@ -237,6 +243,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 			//Did not receive a reply from the driver
 			//Close the connection.
 			//printf("Did not receive any message within 5 seconds or error in select\n");
+			fclose(fp);
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -249,6 +256,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 			//Did not receive a reply from the driver
 			//Close the connection.
 			//printf("recv: Error in receiving confirmation\n");
+			fclose(fp);
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -259,6 +267,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if(strlen(temp) < 13) {
 			//Message size less than expected. Received an invalid confirmation.
 			//printf("Invalid confirmation message from client. Abort connection\n");
+			fclose(fp);
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
@@ -270,6 +279,7 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 		if( strcmp("##DRV_ACK##", subtemp) != 0 ) {
 			//Received an invalid confirmation. 
 			//printf("Invalid confirmation message from client. Abort connection\n");
+			fclose(fp);
 			closesocket(client_socket);
 			client_socket = INVALID_SOCKET;
 			return -1;
