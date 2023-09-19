@@ -4,7 +4,7 @@
 // Global constants
 
 // MSCopy version number
-#define MSCOPY_VERSION				2.01
+#define MSCOPY_VERSION				3.00
 
 // MSCopy error codes
 #define RET_OK						0x00
