@@ -178,6 +178,53 @@ int SendFilesOverSocket(int fCount, TCHAR fileToSend[][25], TCHAR *tstrDirPath, 
 				return -1; 
 			}
 
+			//Wait upto 5 seconds to receive confirmation from the driver
+			iRetSelect = SelectReadUptoNSeconds(client_socket, 5);
+
+			if(iRetSelect <= 0) {
+				//Did not receive a reply from the driver
+				//Close the connection.
+				//printf("Did not receive any message within 5 seconds or error in select\n");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				return -1;
+			}
+
+			memset(temp, 0, sizeof(temp));
+			iRetRecv = recv(client_socket, temp, 15, 0);
+
+			if(iRetRecv <= 0) {
+				//Did not receive a reply from the driver
+				//Close the connection.
+				//printf("recv: Error in receiving confirmation\n");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				return -1;
+			}
+			
+			//printf("Succesfully received %s\n", temp);
+			
+			if(strlen(temp) < 13) {
+				//Message size less than expected. Received an invalid confirmation.
+				//printf("Invalid confirmation message from client. Abort connection\n");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				return -1;
+			}
+
+			memcpy(subtemp, &temp[strlen(temp) - 13], 11); 
+			subtemp[11] = '\0'; //strcmp compares upto \n or EOS message in the source/destination string
+
+			if( strcmp("##DRV_ACK##", subtemp) != 0 ) {
+				//Received an invalid confirmation. 
+				//printf("Invalid confirmation message from client. Abort connection\n");
+				closesocket(client_socket);
+				client_socket = INVALID_SOCKET;
+				return -1;
+			}
+
+			//Final marker received from client. Can successfully skip this file.
+
 			//printf("Mandatory 4 seconds sleep\n");
 			//Sleep(4000);
 			continue;
